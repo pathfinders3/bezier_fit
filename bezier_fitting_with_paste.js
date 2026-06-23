@@ -3,6 +3,7 @@ const bgCanvas = document.getElementById('bg-canvas');
 const ctx = canvas.getContext('2d');
 const bgCtx = bgCanvas.getContext('2d');
 const W = 660, H = 360;
+const BEZIER_STORAGE_KEY = 'bezier_fit:last_control_points';
 let pts = [], drawing = false, bgImage = null, bgOpacity = 0.35;
 
 function syncSize() {
@@ -98,6 +99,42 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2000);
 }
 
+function isPointLike(p) {
+  return !!p && Number.isFinite(p.x) && Number.isFinite(p.y);
+}
+
+function isBezierControlPoints(cp) {
+  return !!cp && isPointLike(cp.P0) && isPointLike(cp.P1) && isPointLike(cp.P2) && isPointLike(cp.P3);
+}
+
+function saveBezierToStorage(cp) {
+  if (!isBezierControlPoints(cp)) return;
+  try {
+    localStorage.setItem(BEZIER_STORAGE_KEY, JSON.stringify(cp));
+  } catch (err) {
+    // localStorage is unavailable (privacy mode, quota, etc.)
+  }
+}
+
+function loadBezierFromStorage() {
+  try {
+    const raw = localStorage.getItem(BEZIER_STORAGE_KEY);
+    if (!raw) return null;
+    const cp = JSON.parse(raw);
+    return isBezierControlPoints(cp) ? cp : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function removeBezierFromStorage() {
+  try {
+    localStorage.removeItem(BEZIER_STORAGE_KEY);
+  } catch (err) {
+    // ignore storage deletion failures
+  }
+}
+
 function parameterize(points) {
   const d = [0];
   for (let i = 1; i < points.length; i++) {
@@ -159,6 +196,39 @@ function drawDot(p, color, r, label) {
   }
 }
 
+function drawFittedBezier(cp) {
+  ctx.beginPath();
+  ctx.moveTo(cp.P0.x, cp.P0.y);
+  ctx.lineTo(cp.P1.x, cp.P1.y);
+  ctx.lineTo(cp.P2.x, cp.P2.y);
+  ctx.lineTo(cp.P3.x, cp.P3.y);
+  ctx.strokeStyle = '#22A07A';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([5,4]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.beginPath();
+  ctx.moveTo(cp.P0.x, cp.P0.y);
+  ctx.bezierCurveTo(cp.P1.x, cp.P1.y, cp.P2.x, cp.P2.y, cp.P3.x, cp.P3.y);
+  ctx.strokeStyle = '#E26B2C';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  drawDot(cp.P0, '#6B7FD4', 6, 'P0');
+  drawDot(cp.P1, '#22A07A', 6, 'P1');
+  drawDot(cp.P2, '#22A07A', 6, 'P2');
+  drawDot(cp.P3, '#6B7FD4', 6, 'P3');
+}
+
+function updateControlPointInfo(cp) {
+  const fmt = p => `(${Math.round(p.x)}, ${Math.round(p.y)})`;
+  document.getElementById('p0-val').textContent = fmt(cp.P0);
+  document.getElementById('p1-val').textContent = fmt(cp.P1);
+  document.getElementById('p2-val').textContent = fmt(cp.P2);
+  document.getElementById('p3-val').textContent = fmt(cp.P3);
+}
+
 function render() {
   const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
   ctx.clearRect(0, 0, W, H);
@@ -189,29 +259,9 @@ function refit() {
   const cp = fitBezier(sampled);
   if (!cp) return;
 
-  ctx.beginPath();
-  ctx.moveTo(cp.P0.x, cp.P0.y);
-  ctx.lineTo(cp.P1.x, cp.P1.y);
-  ctx.lineTo(cp.P2.x, cp.P2.y);
-  ctx.lineTo(cp.P3.x, cp.P3.y);
-  ctx.strokeStyle = '#22A07A'; ctx.lineWidth = 1;
-  ctx.setLineDash([5,4]); ctx.stroke(); ctx.setLineDash([]);
-
-  ctx.beginPath();
-  ctx.moveTo(cp.P0.x, cp.P0.y);
-  ctx.bezierCurveTo(cp.P1.x, cp.P1.y, cp.P2.x, cp.P2.y, cp.P3.x, cp.P3.y);
-  ctx.strokeStyle = '#E26B2C'; ctx.lineWidth = 2.5; ctx.stroke();
-
-  drawDot(cp.P0, '#6B7FD4', 6, 'P0');
-  drawDot(cp.P1, '#22A07A', 6, 'P1');
-  drawDot(cp.P2, '#22A07A', 6, 'P2');
-  drawDot(cp.P3, '#6B7FD4', 6, 'P3');
-
-  const fmt = p => `(${Math.round(p.x)}, ${Math.round(p.y)})`;
-  document.getElementById('p0-val').textContent = fmt(cp.P0);
-  document.getElementById('p1-val').textContent = fmt(cp.P1);
-  document.getElementById('p2-val').textContent = fmt(cp.P2);
-  document.getElementById('p3-val').textContent = fmt(cp.P3);
+  drawFittedBezier(cp);
+  updateControlPointInfo(cp);
+  saveBezierToStorage(cp);
 
   let err = 0;
   const ts2 = parameterize(sampled);
@@ -235,7 +285,18 @@ function clearDrawing() {
 function clearAll() {
   bgImage = null;
   bgCtx.clearRect(0, 0, W, H);
+  removeBezierFromStorage();
   clearDrawing();
 }
 
+function clearStoredBezier() {
+  removeBezierFromStorage();
+  showToast('저장된 좌표를 삭제했습니다');
+}
+
 render();
+const savedCp = loadBezierFromStorage();
+if (savedCp) {
+  drawFittedBezier(savedCp);
+  updateControlPointInfo(savedCp);
+}
