@@ -5,7 +5,7 @@ const bgCtx = bgCanvas.getContext('2d');
 const W = 660, H = 360;
 const BEZIER_STORAGE_KEY = 'bezier_fit:last_control_points';
 const BG_IMAGE_STORAGE_KEY = 'bezier_fit:last_background_image';
-let pts = [], drawing = false, bgImage = null, bgOpacity = 0.35;
+let pts = [], drawing = false, bgImage = null, bgOpacity = 0.35, currentBezier = null;
 
 function syncSize() {
   const wrap = document.getElementById('wrap');
@@ -272,6 +272,36 @@ function updateControlPointInfo(cp) {
   document.getElementById('p3-val').textContent = fmt(cp.P3);
 }
 
+function scaleBezier(cp, factor) {
+  if (!isBezierControlPoints(cp)) return null;
+  const center = {
+    x: (cp.P0.x + cp.P1.x + cp.P2.x + cp.P3.x) / 4,
+    y: (cp.P0.y + cp.P1.y + cp.P2.y + cp.P3.y) / 4
+  };
+  const scalePoint = p => ({ x: center.x + (p.x - center.x) * factor, y: center.y + (p.y - center.y) * factor });
+  return {
+    P0: scalePoint(cp.P0),
+    P1: scalePoint(cp.P1),
+    P2: scalePoint(cp.P2),
+    P3: scalePoint(cp.P3)
+  };
+}
+
+function applyBezierScale(factor) {
+  if (!currentBezier) {
+    showToast('먼저 곡선을 피팅해 주세요');
+    return;
+  }
+  const nextBezier = scaleBezier(currentBezier, factor);
+  if (!nextBezier) return;
+  currentBezier = nextBezier;
+  render();
+  drawFittedBezier(currentBezier);
+  updateControlPointInfo(currentBezier);
+  saveBezierToStorage(currentBezier);
+  document.getElementById('err-box').textContent = '제어점 간격을 수동 조정했습니다';
+}
+
 function render() {
   const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
   ctx.clearRect(0, 0, W, H);
@@ -302,9 +332,10 @@ function refit() {
   const cp = fitBezier(sampled);
   if (!cp) return;
 
-  drawFittedBezier(cp);
-  updateControlPointInfo(cp);
-  saveBezierToStorage(cp);
+  currentBezier = cp;
+  drawFittedBezier(currentBezier);
+  updateControlPointInfo(currentBezier);
+  saveBezierToStorage(currentBezier);
 
   let err = 0;
   const ts2 = parameterize(sampled);
@@ -320,6 +351,7 @@ function refit() {
 
 function clearDrawing() {
   pts = [];
+  currentBezier = null;
   render();
   ['p0-val','p1-val','p2-val','p3-val'].forEach(id => document.getElementById(id).textContent = '—');
   document.getElementById('err-box').textContent = '';
@@ -338,6 +370,14 @@ function clearStoredBezier() {
   showToast('저장된 좌표를 삭제했습니다');
 }
 
+function shrinkBezier() {
+  applyBezierScale(0.9);
+}
+
+function expandBezier() {
+  applyBezierScale(1.1);
+}
+
 function clearStoredBackground() {
   removeBackgroundFromStorage();
   bgImage = null;
@@ -348,8 +388,9 @@ function clearStoredBackground() {
 render();
 const savedCp = loadBezierFromStorage();
 if (savedCp) {
-  drawFittedBezier(savedCp);
-  updateControlPointInfo(savedCp);
+  currentBezier = savedCp;
+  drawFittedBezier(currentBezier);
+  updateControlPointInfo(currentBezier);
 }
 
 const savedBg = loadBackgroundFromStorage();

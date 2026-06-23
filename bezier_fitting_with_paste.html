@@ -49,6 +49,12 @@ canvas { border: 0.5px solid #3a465d; border-radius: var(--border-radius-lg); cu
     <button onclick="clearStoredBackground()" title="저장된 밑그림 삭제">
       <i class="ti ti-photo-x" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>밑그림 삭제
     </button>
+    <button onclick="shrinkBezier()" title="제어점 간격 축소">
+      <i class="ti ti-zoom-out" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>-
+    </button>
+    <button onclick="expandBezier()" title="제어점 간격 확대">
+      <i class="ti ti-zoom-in" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>+
+    </button>
     <div class="sep"></div>
     <div id="opacity-wrap">
       <i class="ti ti-photo" aria-hidden="true" style="font-size:16px"></i>
