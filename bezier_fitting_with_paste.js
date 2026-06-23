@@ -4,6 +4,7 @@ const ctx = canvas.getContext('2d');
 const bgCtx = bgCanvas.getContext('2d');
 const W = 660, H = 360;
 const BEZIER_STORAGE_KEY = 'bezier_fit:last_control_points';
+const BG_IMAGE_STORAGE_KEY = 'bezier_fit:last_background_image';
 let pts = [], drawing = false, bgImage = null, bgOpacity = 0.35;
 
 function syncSize() {
@@ -41,6 +42,7 @@ document.addEventListener('paste', e => {
       img.onload = () => {
         bgImage = img;
         renderBg();
+        saveBackgroundFromBlob(blob);
         showToast('클립보드에서 이미지를 붙여넣었습니다');
         URL.revokeObjectURL(url);
       };
@@ -62,6 +64,7 @@ async function pasteImage() {
         img.onload = () => {
           bgImage = img;
           renderBg();
+          saveBackgroundFromBlob(blob);
           showToast('밑그림을 불러왔습니다');
           URL.revokeObjectURL(url);
         };
@@ -130,6 +133,46 @@ function loadBezierFromStorage() {
 function removeBezierFromStorage() {
   try {
     localStorage.removeItem(BEZIER_STORAGE_KEY);
+  } catch (err) {
+    // ignore storage deletion failures
+  }
+}
+
+function saveBackgroundDataUrl(dataUrl) {
+  if (!dataUrl) return false;
+  try {
+    localStorage.setItem(BG_IMAGE_STORAGE_KEY, dataUrl);
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+function saveBackgroundFromBlob(blob) {
+  if (!blob) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const ok = saveBackgroundDataUrl(typeof reader.result === 'string' ? reader.result : '');
+    if (!ok) showToast('이미지가 커서 밑그림 저장에 실패했습니다');
+  };
+  reader.onerror = () => {
+    // ignore read failures
+  };
+  reader.readAsDataURL(blob);
+}
+
+function loadBackgroundFromStorage() {
+  try {
+    const dataUrl = localStorage.getItem(BG_IMAGE_STORAGE_KEY);
+    return dataUrl || null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function removeBackgroundFromStorage() {
+  try {
+    localStorage.removeItem(BG_IMAGE_STORAGE_KEY);
   } catch (err) {
     // ignore storage deletion failures
   }
@@ -286,6 +329,7 @@ function clearAll() {
   bgImage = null;
   bgCtx.clearRect(0, 0, W, H);
   removeBezierFromStorage();
+  removeBackgroundFromStorage();
   clearDrawing();
 }
 
@@ -294,9 +338,26 @@ function clearStoredBezier() {
   showToast('저장된 좌표를 삭제했습니다');
 }
 
+function clearStoredBackground() {
+  removeBackgroundFromStorage();
+  bgImage = null;
+  renderBg();
+  showToast('저장된 밑그림을 삭제했습니다');
+}
+
 render();
 const savedCp = loadBezierFromStorage();
 if (savedCp) {
   drawFittedBezier(savedCp);
   updateControlPointInfo(savedCp);
+}
+
+const savedBg = loadBackgroundFromStorage();
+if (savedBg) {
+  const img = new Image();
+  img.onload = () => {
+    bgImage = img;
+    renderBg();
+  };
+  img.src = savedBg;
 }
