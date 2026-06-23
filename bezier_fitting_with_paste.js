@@ -5,8 +5,7 @@ const bgCtx = bgCanvas.getContext('2d');
 const W = 660, H = 360;
 const BEZIER_STORAGE_KEY = 'bezier_fit:last_control_points';
 const BG_IMAGE_STORAGE_KEY = 'bezier_fit:last_background_image';
-const DEFAULT_EXPORT_SAMPLES = 101;
-let pts = [], drawing = false, bgImage = null, bgOpacity = 0.35, currentBezier = null, baseBezier = null, currentScale = 1;
+let pts = [], drawing = false, bgImage = null, bgOpacity = 0.35, currentBezier = null, originalBezier = null, currentScale = 1;
 
 function syncSize() {
   const wrap = document.getElementById('wrap');
@@ -111,14 +110,20 @@ function isBezierControlPoints(cp) {
   return !!cp && isPointLike(cp.P0) && isPointLike(cp.P1) && isPointLike(cp.P2) && isPointLike(cp.P3);
 }
 
+function cloneBezier(cp) {
+  return {
+    P0: { x: cp.P0.x, y: cp.P0.y },
+    P1: { x: cp.P1.x, y: cp.P1.y },
+    P2: { x: cp.P2.x, y: cp.P2.y },
+    P3: { x: cp.P3.x, y: cp.P3.y }
+  };
+}
+
 function saveBezierToStorage(cp) {
   if (!isBezierControlPoints(cp)) return;
   try {
-    const payload = {
-      current: cp,
-      base: isBezierControlPoints(baseBezier) ? baseBezier : cp,
-      scale: Number.isFinite(currentScale) ? currentScale : 1
-    };
+    const base = isBezierControlPoints(originalBezier) ? originalBezier : cp;
+    const payload = { cp, originalBezier: base, scale: currentScale };
     localStorage.setItem(BEZIER_STORAGE_KEY, JSON.stringify(payload));
   } catch (err) {
     // localStorage is unavailable (privacy mode, quota, etc.)
@@ -131,13 +136,14 @@ function loadBezierFromStorage() {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (isBezierControlPoints(parsed)) {
-      return { current: parsed, base: parsed, scale: 1 };
+      return { cp: parsed, originalBezier: parsed, scale: 1 };
     }
-    if (!parsed || !isBezierControlPoints(parsed.current)) return null;
-    const current = parsed.current;
-    const base = isBezierControlPoints(parsed.base) ? parsed.base : current;
-    const scale = Number.isFinite(parsed.scale) ? parsed.scale : 1;
-    return { current, base, scale };
+    if (parsed && isBezierControlPoints(parsed.cp)) {
+      const base = isBezierControlPoints(parsed.originalBezier) ? parsed.originalBezier : parsed.cp;
+      const scale = Number.isFinite(parsed.scale) ? parsed.scale : 1;
+      return { cp: parsed.cp, originalBezier: base, scale };
+    }
+    return null;
   } catch (err) {
     return null;
   }
@@ -277,113 +283,131 @@ function drawFittedBezier(cp) {
   drawDot(cp.P3, '#6B7FD4', 6, 'P3');
 }
 
-function getBezierPoint(cp, t) {
-  return {
-    x: B(0, t) * cp.P0.x + B(1, t) * cp.P1.x + B(2, t) * cp.P2.x + B(3, t) * cp.P3.x,
-    y: B(0, t) * cp.P0.y + B(1, t) * cp.P1.y + B(2, t) * cp.P2.y + B(3, t) * cp.P3.y
-  };
-}
-
-function sampleBezierCurve(cp, sampleCount = DEFAULT_EXPORT_SAMPLES) {
-  const count = Math.max(2, sampleCount);
-  const points = [];
-  for (let i = 0; i < count; i++) {
-    const t = i / (count - 1);
-    points.push(getBezierPoint(cp, t));
-  }
-  return points;
-}
-
-function getBounds(points) {
-  if (!points || points.length === 0) {
-    return { minX: 0, minY: 0, maxX: 0, maxY: 0, width: 0, height: 0 };
-  }
-  let minX = points[0].x, minY = points[0].y, maxX = points[0].x, maxY = points[0].y;
-  for (let i = 1; i < points.length; i++) {
-    const p = points[i];
-    if (p.x < minX) minX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y > maxY) maxY = p.y;
-  }
-  return { minX, minY, maxX, maxY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
-}
-
-async function copyTextToClipboard(text) {
-  if (navigator.clipboard && window.isSecureContext) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-  const ta = document.createElement('textarea');
-  ta.value = text;
-  ta.style.position = 'fixed';
-  ta.style.left = '-9999px';
-  document.body.appendChild(ta);
-  ta.focus();
-  ta.select();
-  document.execCommand('copy');
-  document.body.removeChild(ta);
-}
-
-async function outToJson() {
-  if (!currentBezier) {
-    showToast('내보낼 베지어 곡선이 없습니다');
-    return;
-  }
-  const currentPointsRaw = sampleBezierCurve(currentBezier);
-  const baseCp = baseBezier || currentBezier;
-  const basePointsRaw = sampleBezierCurve(baseCp);
-  const currentBounds = getBounds(currentPointsRaw);
-  const baseBounds = getBounds(basePointsRaw);
-
-  const points = currentPointsRaw.map(p => ({
-    x: Math.round(p.x),
-    y: Math.round(p.y),
-    size: 4,
-    canConnect: false,
-    mergeState: false
-  }));
-
-  const scaleValue = Number.isFinite(currentScale) ? currentScale : 1;
-  const payload = {
-    version: 1,
-    groups: [
-      {
-        id: 'group-1',
-        segments: [
-          {
-            id: 'seg-1',
-            points
-          }
-        ],
-        connections: []
-      }
-    ],
-    canvas1ClipboardScale: {
-      scalePercent: Math.round(scaleValue * 100),
-      scale: Number(scaleValue.toFixed(4)),
-      sourceWidth: Math.round(baseBounds.width),
-      sourceHeight: Math.round(baseBounds.height),
-      appliedWidth: Math.round(currentBounds.width),
-      appliedHeight: Math.round(currentBounds.height),
-      mode: 'cover-5pct-ceil'
-    }
-  };
-
-  try {
-    await copyTextToClipboard(JSON.stringify(payload, null, 2));
-    showToast('JSON을 클립보드로 내보냈습니다');
-  } catch (err) {
-    showToast('클립보드 내보내기에 실패했습니다');
-  }
-}
-
 function updateControlPointInfo(cp) {
   const fmt = p => `(${Math.round(p.x)}, ${Math.round(p.y)})`;
   document.getElementById('p0-val').textContent = fmt(cp.P0);
   document.getElementById('p1-val').textContent = fmt(cp.P1);
   document.getElementById('p2-val').textContent = fmt(cp.P2);
   document.getElementById('p3-val').textContent = fmt(cp.P3);
+}
+
+function bezierPoint(cp, t) {
+  const b0 = B(0, t), b1 = B(1, t), b2 = B(2, t), b3 = B(3, t);
+  return {
+    x: b0 * cp.P0.x + b1 * cp.P1.x + b2 * cp.P2.x + b3 * cp.P3.x,
+    y: b0 * cp.P0.y + b1 * cp.P1.y + b2 * cp.P2.y + b3 * cp.P3.y
+  };
+}
+
+function boundsOfPoints(points) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of points) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return {
+    minX,
+    minY,
+    maxX,
+    maxY,
+    width: Math.max(1, Math.round(maxX - minX)),
+    height: Math.max(1, Math.round(maxY - minY))
+  };
+}
+
+function sampleBezierByDistance(cp, step) {
+  const denseCount = 400;
+  const dense = [];
+  for (let i = 0; i <= denseCount; i++) dense.push(bezierPoint(cp, i / denseCount));
+
+  const result = [dense[0]];
+  let last = dense[0];
+  for (let i = 1; i < dense.length; i++) {
+    const p = dense[i];
+    const dx = p.x - last.x;
+    const dy = p.y - last.y;
+    if (Math.hypot(dx, dy) >= step) {
+      result.push(p);
+      last = p;
+    }
+  }
+
+  const end = dense[dense.length - 1];
+  const tail = result[result.length - 1];
+  if (Math.hypot(end.x - tail.x, end.y - tail.y) > 0.001) result.push(end);
+  return result;
+}
+
+function angleFromPoints(a, b) {
+  const rad = Math.atan2(-(b.y - a.y), b.x - a.x);
+  return Math.round((rad * 180 / Math.PI + 360) % 360);
+}
+
+async function exportBezierJsonToClipboard() {
+  if (!currentBezier) {
+    showToast('먼저 곡선을 피팅해 주세요');
+    return;
+  }
+
+  const sampled = sampleBezierByDistance(currentBezier, 4);
+  const rects = sampled.map((p, i) => {
+    let role = 'middle';
+    if (i === 0) role = 'start';
+    else if (i === sampled.length - 1) role = 'end';
+
+    let angle = null;
+    if (i > 0) angle = angleFromPoints(sampled[i - 1], p);
+
+    return {
+      x: Math.round(p.x),
+      y: Math.round(p.y),
+      size: 4,
+      angle,
+      sharpTurn: false,
+      mergeState: false,
+      role,
+      polylineId: 'PL1',
+      pointOrder: i + 1
+    };
+  });
+
+  const pointIndices = Array.from({ length: rects.length }, (_, i) => i);
+  const sourcePoints = sampleBezierByDistance(originalBezier || currentBezier, 4);
+  const sourceBounds = boundsOfPoints(sourcePoints);
+  const appliedBounds = boundsOfPoints(sampled);
+  const scaleValue = Number.isFinite(currentScale) ? currentScale : 1;
+
+  const payload = {
+    rects,
+    polylines: [
+      {
+        polylineId: 'PL1',
+        startIndex: 0,
+        endIndex: Math.max(0, rects.length - 1),
+        pointCount: rects.length,
+        pointIndices
+      }
+    ],
+    canvas1ClipboardScale: {
+      scalePercent: Math.round(scaleValue * 100),
+      scale: Number(scaleValue.toFixed(4)),
+      sourceWidth: sourceBounds.width,
+      sourceHeight: sourceBounds.height,
+      appliedWidth: appliedBounds.width,
+      appliedHeight: appliedBounds.height,
+      mode: 'bezier-manual-scale'
+    }
+  };
+
+  const text = JSON.stringify(payload, null, 2);
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('베지어 JSON을 클립보드로 복사했습니다');
+  } catch (err) {
+    showToast('클립보드 복사에 실패했습니다');
+  }
 }
 
 function scaleBezier(cp, factor) {
@@ -447,8 +471,8 @@ function refit() {
   const cp = fitBezier(sampled);
   if (!cp) return;
 
-  baseBezier = cp;
   currentBezier = cp;
+  originalBezier = cloneBezier(cp);
   currentScale = 1;
   drawFittedBezier(currentBezier);
   updateControlPointInfo(currentBezier);
@@ -468,8 +492,8 @@ function refit() {
 
 function clearDrawing() {
   pts = [];
-  baseBezier = null;
   currentBezier = null;
+  originalBezier = null;
   currentScale = 1;
   render();
   ['p0-val','p1-val','p2-val','p3-val'].forEach(id => document.getElementById(id).textContent = '—');
@@ -507,8 +531,8 @@ function clearStoredBackground() {
 render();
 const savedCp = loadBezierFromStorage();
 if (savedCp) {
-  currentBezier = savedCp.current;
-  baseBezier = savedCp.base;
+  currentBezier = cloneBezier(savedCp.cp);
+  originalBezier = cloneBezier(savedCp.originalBezier);
   currentScale = savedCp.scale;
   drawFittedBezier(currentBezier);
   updateControlPointInfo(currentBezier);
