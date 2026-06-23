@@ -5,7 +5,8 @@ const bgCtx = bgCanvas.getContext('2d');
 const W = 660, H = 360;
 const BEZIER_STORAGE_KEY = 'bezier_fit:last_control_points';
 const BG_IMAGE_STORAGE_KEY = 'bezier_fit:last_background_image';
-let pts = [], drawing = false, bgImage = null, bgOpacity = 0.35, currentBezier = null;
+const DEFAULT_EXPORT_SAMPLES = 101;
+let pts = [], drawing = false, bgImage = null, bgOpacity = 0.35, currentBezier = null, baseBezier = null, currentScale = 1;
 
 function syncSize() {
   const wrap = document.getElementById('wrap');
@@ -113,7 +114,12 @@ function isBezierControlPoints(cp) {
 function saveBezierToStorage(cp) {
   if (!isBezierControlPoints(cp)) return;
   try {
-    localStorage.setItem(BEZIER_STORAGE_KEY, JSON.stringify(cp));
+    const payload = {
+      current: cp,
+      base: isBezierControlPoints(baseBezier) ? baseBezier : cp,
+      scale: Number.isFinite(currentScale) ? currentScale : 1
+    };
+    localStorage.setItem(BEZIER_STORAGE_KEY, JSON.stringify(payload));
   } catch (err) {
     // localStorage is unavailable (privacy mode, quota, etc.)
   }
@@ -123,8 +129,15 @@ function loadBezierFromStorage() {
   try {
     const raw = localStorage.getItem(BEZIER_STORAGE_KEY);
     if (!raw) return null;
-    const cp = JSON.parse(raw);
-    return isBezierControlPoints(cp) ? cp : null;
+    const parsed = JSON.parse(raw);
+    if (isBezierControlPoints(parsed)) {
+      return { current: parsed, base: parsed, scale: 1 };
+    }
+    if (!parsed || !isBezierControlPoints(parsed.current)) return null;
+    const current = parsed.current;
+    const base = isBezierControlPoints(parsed.base) ? parsed.base : current;
+    const scale = Number.isFinite(parsed.scale) ? parsed.scale : 1;
+    return { current, base, scale };
   } catch (err) {
     return null;
   }
@@ -264,6 +277,107 @@ function drawFittedBezier(cp) {
   drawDot(cp.P3, '#6B7FD4', 6, 'P3');
 }
 
+function getBezierPoint(cp, t) {
+  return {
+    x: B(0, t) * cp.P0.x + B(1, t) * cp.P1.x + B(2, t) * cp.P2.x + B(3, t) * cp.P3.x,
+    y: B(0, t) * cp.P0.y + B(1, t) * cp.P1.y + B(2, t) * cp.P2.y + B(3, t) * cp.P3.y
+  };
+}
+
+function sampleBezierCurve(cp, sampleCount = DEFAULT_EXPORT_SAMPLES) {
+  const count = Math.max(2, sampleCount);
+  const points = [];
+  for (let i = 0; i < count; i++) {
+    const t = i / (count - 1);
+    points.push(getBezierPoint(cp, t));
+  }
+  return points;
+}
+
+function getBounds(points) {
+  if (!points || points.length === 0) {
+    return { minX: 0, minY: 0, maxX: 0, maxY: 0, width: 0, height: 0 };
+  }
+  let minX = points[0].x, minY = points[0].y, maxX = points[0].x, maxY = points[0].y;
+  for (let i = 1; i < points.length; i++) {
+    const p = points[i];
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return { minX, minY, maxX, maxY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+}
+
+async function outToJson() {
+  if (!currentBezier) {
+    showToast('내보낼 베지어 곡선이 없습니다');
+    return;
+  }
+  const currentPointsRaw = sampleBezierCurve(currentBezier);
+  const baseCp = baseBezier || currentBezier;
+  const basePointsRaw = sampleBezierCurve(baseCp);
+  const currentBounds = getBounds(currentPointsRaw);
+  const baseBounds = getBounds(basePointsRaw);
+
+  const points = currentPointsRaw.map(p => ({
+    x: Math.round(p.x),
+    y: Math.round(p.y),
+    size: 4,
+    canConnect: false,
+    mergeState: false
+  }));
+
+  const scaleValue = Number.isFinite(currentScale) ? currentScale : 1;
+  const payload = {
+    version: 1,
+    groups: [
+      {
+        id: 'group-1',
+        segments: [
+          {
+            id: 'seg-1',
+            points
+          }
+        ],
+        connections: []
+      }
+    ],
+    canvas1ClipboardScale: {
+      scalePercent: Math.round(scaleValue * 100),
+      scale: Number(scaleValue.toFixed(4)),
+      sourceWidth: Math.round(baseBounds.width),
+      sourceHeight: Math.round(baseBounds.height),
+      appliedWidth: Math.round(currentBounds.width),
+      appliedHeight: Math.round(currentBounds.height),
+      mode: 'cover-5pct-ceil'
+    }
+  };
+
+  try {
+    await copyTextToClipboard(JSON.stringify(payload, null, 2));
+    showToast('JSON을 클립보드로 내보냈습니다');
+  } catch (err) {
+    showToast('클립보드 내보내기에 실패했습니다');
+  }
+}
+
 function updateControlPointInfo(cp) {
   const fmt = p => `(${Math.round(p.x)}, ${Math.round(p.y)})`;
   document.getElementById('p0-val').textContent = fmt(cp.P0);
@@ -295,6 +409,7 @@ function applyBezierScale(factor) {
   const nextBezier = scaleBezier(currentBezier, factor);
   if (!nextBezier) return;
   currentBezier = nextBezier;
+  currentScale *= factor;
   render();
   drawFittedBezier(currentBezier);
   updateControlPointInfo(currentBezier);
@@ -332,7 +447,9 @@ function refit() {
   const cp = fitBezier(sampled);
   if (!cp) return;
 
+  baseBezier = cp;
   currentBezier = cp;
+  currentScale = 1;
   drawFittedBezier(currentBezier);
   updateControlPointInfo(currentBezier);
   saveBezierToStorage(currentBezier);
@@ -351,7 +468,9 @@ function refit() {
 
 function clearDrawing() {
   pts = [];
+  baseBezier = null;
   currentBezier = null;
+  currentScale = 1;
   render();
   ['p0-val','p1-val','p2-val','p3-val'].forEach(id => document.getElementById(id).textContent = '—');
   document.getElementById('err-box').textContent = '';
@@ -388,7 +507,9 @@ function clearStoredBackground() {
 render();
 const savedCp = loadBezierFromStorage();
 if (savedCp) {
-  currentBezier = savedCp;
+  currentBezier = savedCp.current;
+  baseBezier = savedCp.base;
+  currentScale = savedCp.scale;
   drawFittedBezier(currentBezier);
   updateControlPointInfo(currentBezier);
 }
