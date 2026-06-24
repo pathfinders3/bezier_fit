@@ -6,6 +6,7 @@ const W = 660, H = 360;
 const BEZIER_STORAGE_KEY = 'bezier_fit:last_control_points';
 const BG_IMAGE_STORAGE_KEY = 'bezier_fit:last_background_image';
 let pts = [], drawing = false, bgImage = null, bgOpacity = 0.35, currentBezier = null, originalBezier = null, currentScale = 1;
+let showControlPoints = true;
 
 function syncSize() {
   const wrap = document.getElementById('wrap');
@@ -261,6 +262,15 @@ function drawDot(p, color, r, label) {
 function drawFittedBezier(cp) {
   ctx.beginPath();
   ctx.moveTo(cp.P0.x, cp.P0.y);
+  ctx.bezierCurveTo(cp.P1.x, cp.P1.y, cp.P2.x, cp.P2.y, cp.P3.x, cp.P3.y);
+  ctx.strokeStyle = '#E26B2C';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  if (!showControlPoints) return;
+
+  ctx.beginPath();
+  ctx.moveTo(cp.P0.x, cp.P0.y);
   ctx.lineTo(cp.P1.x, cp.P1.y);
   ctx.lineTo(cp.P2.x, cp.P2.y);
   ctx.lineTo(cp.P3.x, cp.P3.y);
@@ -270,17 +280,16 @@ function drawFittedBezier(cp) {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  ctx.beginPath();
-  ctx.moveTo(cp.P0.x, cp.P0.y);
-  ctx.bezierCurveTo(cp.P1.x, cp.P1.y, cp.P2.x, cp.P2.y, cp.P3.x, cp.P3.y);
-  ctx.strokeStyle = '#E26B2C';
-  ctx.lineWidth = 2.5;
-  ctx.stroke();
-
   drawDot(cp.P0, '#6B7FD4', 6, 'P0');
   drawDot(cp.P1, '#22A07A', 6, 'P1');
   drawDot(cp.P2, '#22A07A', 6, 'P2');
   drawDot(cp.P3, '#6B7FD4', 6, 'P3');
+}
+
+function toggleControlPoints(checked) {
+  showControlPoints = !!checked;
+  render();
+  if (currentBezier) drawFittedBezier(currentBezier);
 }
 
 function updateControlPointInfo(cp) {

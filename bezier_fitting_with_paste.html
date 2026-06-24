@@ -78,6 +78,11 @@
         <input type="range" min="5" max="60" value="20" step="1" id="sld-n" style="width:80px" oninput="document.getElementById('n-val').textContent=this.value; refit()">
         <span id="n-val" style="min-width:20px">20</span>
       </div>
+      <div class="sep"></div>
+      <label for="chk-control-points" style="display:flex; align-items:center; gap:6px; font-size:13px; color:#c3cddd; user-select:none;">
+        <input type="checkbox" id="chk-control-points" checked onchange="toggleControlPoints(this.checked)">
+        <span>제어점 표시</span>
+      </label>
     </div>
 
     <div class="canvas-wrap" id="wrap">
