@@ -90,9 +90,8 @@ function selectBezierAtPoint(x, y) {
   return false;
 }
 
-function moveSelectedBezier(dx, dy) {
-  const slot = getActiveSlot();
-  if (!slot.bezier) return false;
+function translateBezierCurve(slot, dx, dy) {
+  if (!slot || !slot.bezier) return false;
   const moved = {
     P0: { x: slot.bezier.P0.x + dx, y: slot.bezier.P0.y + dy },
     P1: { x: slot.bezier.P1.x + dx, y: slot.bezier.P1.y + dy },
@@ -102,6 +101,12 @@ function moveSelectedBezier(dx, dy) {
   slot.bezier = moved;
   slot.originalBezier = cloneBezier(moved);
   slot.scale = 1;
+  return true;
+}
+
+function moveSelectedBezier(dx, dy) {
+  const slot = getActiveSlot();
+  if (!translateBezierCurve(slot, dx, dy)) return false;
   syncActiveBezierState();
   render();
   drawFittedBezier(currentBezier, true);
@@ -138,24 +143,8 @@ function moveLinkedCurves(dx, dy) {
     const slot = bezierSlots[link.slotIndex];
     const linkedSlot = bezierSlots[link.linkedSlotIndex];
     if (!slot || !slot.bezier || !linkedSlot || !linkedSlot.bezier) return;
-    const movePoint = point => ({ x: point.x + dx, y: point.y + dy });
-
-    slot.bezier = {
-      P0: movePoint(slot.bezier.P0),
-      P1: movePoint(slot.bezier.P1),
-      P2: movePoint(slot.bezier.P2),
-      P3: movePoint(slot.bezier.P3)
-    };
-    linkedSlot.bezier = {
-      P0: movePoint(linkedSlot.bezier.P0),
-      P1: movePoint(linkedSlot.bezier.P1),
-      P2: movePoint(linkedSlot.bezier.P2),
-      P3: movePoint(linkedSlot.bezier.P3)
-    };
-    slot.originalBezier = cloneBezier(slot.bezier);
-    linkedSlot.originalBezier = cloneBezier(linkedSlot.bezier);
-    slot.scale = 1;
-    linkedSlot.scale = 1;
+    translateBezierCurve(slot, dx, dy);
+    translateBezierCurve(linkedSlot, dx, dy);
   });
 }
 
@@ -323,7 +312,9 @@ window.addEventListener('keydown', e => {
   if (moveSelectedBezier(dx, dy)) {
     moveLinkedCurves(dx, dy);
     render();
-    drawFittedBezier(currentBezier, true);
+    bezierSlots.forEach((slot, index) => {
+      if (slot.bezier) drawFittedBezier(slot.bezier, index === activeBezierIndex);
+    });
     updateControlPointInfo(currentBezier);
     saveBezierToStorage();
     e.preventDefault();
