@@ -1,97 +1,106 @@
-
-<style>
-#app { padding: 1rem 0; background: #0f141b; color: #e8edf5; border-radius: 12px; }
-.toolbar { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
-.toolbar button {
-  background: #1a2230;
-  color: #e8edf5;
-  border: 1px solid #2b374c;
-}
-.toolbar button:hover { background: #243146; }
-.toolbar button:focus-visible,
-.toolbar input[type="range"]:focus-visible {
-  outline: 2px solid #67b7ff;
-  outline-offset: 2px;
-  box-shadow: 0 0 0 3px rgba(103, 183, 255, 0.2);
-}
-.canvas-wrap { position: relative; width: 100%; }
-canvas { border: 0.5px solid #3a465d; border-radius: var(--border-radius-lg); cursor: crosshair; display: block; width: 100%; }
-#bg-canvas { position: absolute; top: 0; left: 0; border-radius: var(--border-radius-lg); pointer-events: none; }
-.legend { display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap; }
-.leg-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #b9c4d4; }
-.leg-dot { width: 20px; height: 3px; border-radius: 2px; }
-.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
-.info-card { background: #161f2d; border: 1px solid #2b374c; border-radius: var(--border-radius-md); padding: 10px 14px; }
-.info-label { font-size: 12px; color: #b9c4d4; margin-bottom: 2px; }
-.info-val { font-size: 13px; font-weight: 500; font-family: var(--font-mono); }
-.sep { width: 0.5px; background: #344156; align-self: stretch; }
-#toast { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: #121923; border: 0.5px solid #344156; border-radius: var(--border-radius-md); padding: 6px 14px; font-size: 13px; color: #e8edf5; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; z-index: 10; }
-#toast.show { opacity: 1; }
-#opacity-wrap { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #c3cddd; }
-#err-box { color: #b9c4d4 !important; }
-</style>
-
-<div id="app">
-  <h2 class="sr-only">밑그림 붙여넣기 + 베지어 곡선 피팅 데모</h2>
-  <div class="toolbar">
-    <button onclick="pasteImage()" title="클립보드에서 이미지 붙여넣기">
-      <i class="ti ti-clipboard" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>밑그림 붙여넣기
-    </button>
-    <button onclick="clearDrawing()">
-      <i class="ti ti-eraser" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>드로잉 지우기
-    </button>
-    <button onclick="clearAll()">
-      <i class="ti ti-trash" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>전체 초기화
-    </button>
-    <button onclick="clearStoredBezier()" title="저장된 베지어 좌표 삭제">
-      <i class="ti ti-database-x" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>좌표 삭제
-    </button>
-    <button onclick="clearStoredBackground()" title="저장된 밑그림 삭제">
-      <i class="ti ti-photo-x" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>밑그림 삭제
-    </button>
-    <button onclick="shrinkBezier()" title="제어점 간격 축소">
-      <i class="ti ti-zoom-out" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>-
-    </button>
-    <button onclick="expandBezier()" title="제어점 간격 확대">
-      <i class="ti ti-zoom-in" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>+
-    </button>
-    <button onclick="exportBezierJsonToClipboard()" title="베지어 JSON을 클립보드로 복사">
-      <i class="ti ti-copy" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>JSON 내보내기
-    </button>
-    <div class="sep"></div>
-    <div id="opacity-wrap">
-      <i class="ti ti-photo" aria-hidden="true" style="font-size:16px"></i>
-      <span>밑그림 투명도</span>
-      <input type="range" min="5" max="100" value="35" step="5" id="sld-opacity" style="width:90px" oninput="setBgOpacity(this.value)">
-      <span id="opacity-val" style="min-width:30px">35%</span>
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>베지어 피팅 데모</title>
+  <link rel="icon" type="image/png" href="./bezier_fitting_with_paste.png">
+  <style>
+    #app { padding: 1rem 0; background: #0f141b; color: #e8edf5; border-radius: 12px; }
+    .toolbar { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+    .toolbar button {
+      background: #1a2230;
+      color: #e8edf5;
+      border: 1px solid #2b374c;
+    }
+    .toolbar button:hover { background: #243146; }
+    .toolbar button:focus-visible,
+    .toolbar input[type="range"]:focus-visible {
+      outline: 2px solid #67b7ff;
+      outline-offset: 2px;
+      box-shadow: 0 0 0 3px rgba(103, 183, 255, 0.2);
+    }
+    .canvas-wrap { position: relative; width: 100%; }
+    canvas { border: 0.5px solid #3a465d; border-radius: var(--border-radius-lg); cursor: crosshair; display: block; width: 100%; }
+    #bg-canvas { position: absolute; top: 0; left: 0; border-radius: var(--border-radius-lg); pointer-events: none; }
+    .legend { display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap; }
+    .leg-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #b9c4d4; }
+    .leg-dot { width: 20px; height: 3px; border-radius: 2px; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .info-card { background: #161f2d; border: 1px solid #2b374c; border-radius: var(--border-radius-md); padding: 10px 14px; }
+    .info-label { font-size: 12px; color: #b9c4d4; margin-bottom: 2px; }
+    .info-val { font-size: 13px; font-weight: 500; font-family: var(--font-mono); }
+    .sep { width: 0.5px; background: #344156; align-self: stretch; }
+    #toast { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: #121923; border: 0.5px solid #344156; border-radius: var(--border-radius-md); padding: 6px 14px; font-size: 13px; color: #e8edf5; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; z-index: 10; }
+    #toast.show { opacity: 1; }
+    #opacity-wrap { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #c3cddd; }
+    #err-box { color: #b9c4d4 !important; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h2 class="sr-only">밑그림 붙여넣기 + 베지어 곡선 피팅 데모</h2>
+    <div class="toolbar">
+      <button onclick="pasteImage()" title="클립보드에서 이미지 붙여넣기">
+        <i class="ti ti-clipboard" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>밑그림 붙여넣기
+      </button>
+      <button onclick="clearDrawing()">
+        <i class="ti ti-eraser" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>드로잉 지우기
+      </button>
+      <button onclick="clearAll()">
+        <i class="ti ti-trash" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>전체 초기화
+      </button>
+      <button onclick="clearStoredBezier()" title="저장된 베지어 좌표 삭제">
+        <i class="ti ti-database-x" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>좌표 삭제
+      </button>
+      <button onclick="clearStoredBackground()" title="저장된 밑그림 삭제">
+        <i class="ti ti-photo-x" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>밑그림 삭제
+      </button>
+      <button onclick="shrinkBezier()" title="제어점 간격 축소">
+        <i class="ti ti-zoom-out" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>-
+      </button>
+      <button onclick="expandBezier()" title="제어점 간격 확대">
+        <i class="ti ti-zoom-in" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>+
+      </button>
+      <button onclick="exportBezierJsonToClipboard()" title="베지어 JSON을 클립보드로 복사">
+        <i class="ti ti-copy" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>JSON 내보내기
+      </button>
+      <div class="sep"></div>
+      <div id="opacity-wrap">
+        <i class="ti ti-photo" aria-hidden="true" style="font-size:16px"></i>
+        <span>밑그림 투명도</span>
+        <input type="range" min="5" max="100" value="35" step="5" id="sld-opacity" style="width:90px" oninput="setBgOpacity(this.value)">
+        <span id="opacity-val" style="min-width:30px">35%</span>
+      </div>
+      <div class="sep"></div>
+      <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#c3cddd;">
+        <span>샘플 수</span>
+        <input type="range" min="5" max="60" value="20" step="1" id="sld-n" style="width:80px" oninput="document.getElementById('n-val').textContent=this.value; refit()">
+        <span id="n-val" style="min-width:20px">20</span>
+      </div>
     </div>
-    <div class="sep"></div>
-    <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#c3cddd;">
-      <span>샘플 수</span>
-      <input type="range" min="5" max="60" value="20" step="1" id="sld-n" style="width:80px" oninput="document.getElementById('n-val').textContent=this.value; refit()">
-      <span id="n-val" style="min-width:20px">20</span>
+
+    <div class="canvas-wrap" id="wrap">
+      <canvas id="bg-canvas" width="660" height="360"></canvas>
+      <canvas id="c" width="660" height="360"></canvas>
+      <div id="toast">클립보드에서 이미지를 붙여넣었습니다</div>
     </div>
+
+    <div class="legend">
+      <div class="leg-item"><div class="leg-dot" style="background:#6B7FD4"></div>원본 곡선 (드로잉)</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#E26B2C"></div>피팅된 베지어 곡선</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#22A07A; border:1px dashed #22A07A; height:0"></div>제어점 폴리곤</div>
+    </div>
+
+    <div class="info-grid">
+      <div class="info-card"><div class="info-label">P1 — 제어점 1</div><div class="info-val" id="p1-val">—</div></div>
+      <div class="info-card"><div class="info-label">P2 — 제어점 2</div><div class="info-val" id="p2-val">—</div></div>
+      <div class="info-card"><div class="info-label">P0 — 시작점</div><div class="info-val" id="p0-val">—</div></div>
+      <div class="info-card"><div class="info-label">P3 — 끝점</div><div class="info-val" id="p3-val">—</div></div>
+    </div>
+    <div id="err-box" style="margin-top:8px; font-size:12px; color:var(--color-text-secondary);"></div>
   </div>
 
-  <div class="canvas-wrap" id="wrap">
-    <canvas id="bg-canvas" width="660" height="360"></canvas>
-    <canvas id="c" width="660" height="360"></canvas>
-    <div id="toast">클립보드에서 이미지를 붙여넣었습니다</div>
-  </div>
-
-  <div class="legend">
-    <div class="leg-item"><div class="leg-dot" style="background:#6B7FD4"></div>원본 곡선 (드로잉)</div>
-    <div class="leg-item"><div class="leg-dot" style="background:#E26B2C"></div>피팅된 베지어 곡선</div>
-    <div class="leg-item"><div class="leg-dot" style="background:#22A07A; border:1px dashed #22A07A; height:0"></div>제어점 폴리곤</div>
-  </div>
-
-  <div class="info-grid">
-    <div class="info-card"><div class="info-label">P1 — 제어점 1</div><div class="info-val" id="p1-val">—</div></div>
-    <div class="info-card"><div class="info-label">P2 — 제어점 2</div><div class="info-val" id="p2-val">—</div></div>
-    <div class="info-card"><div class="info-label">P0 — 시작점</div><div class="info-val" id="p0-val">—</div></div>
-    <div class="info-card"><div class="info-label">P3 — 끝점</div><div class="info-val" id="p3-val">—</div></div>
-  </div>
-  <div id="err-box" style="margin-top:8px; font-size:12px; color:var(--color-text-secondary);"></div>
-</div>
-
-<script src="./bezier_fitting_with_paste.js"></script>
+  <script src="./bezier_fitting_with_paste.js"></script>
+</body>
+</html>
