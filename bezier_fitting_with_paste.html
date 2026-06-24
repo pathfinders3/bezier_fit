@@ -14,6 +14,7 @@
       border: 1px solid #2b374c;
     }
     .toolbar button:hover { background: #243146; }
+    .toolbar .slot-btn.active { background: #243146; border-color: #67b7ff; }
     .toolbar button:focus-visible,
     .toolbar input[type="range"]:focus-visible {
       outline: 2px solid #67b7ff;
@@ -76,6 +77,13 @@
       <button onclick="exportBezierJsonToClipboard()" title="베지어 JSON을 클립보드로 복사">
         <i class="ti ti-copy" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>JSON 내보내기
       </button>
+      <button onclick="addBezierSlot()" title="새 베지어 곡선 추가">
+        <i class="ti ti-plus" aria-hidden="true" style="font-size:16px; vertical-align:-2px; margin-right:4px"></i>Bezier+
+      </button>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <button class="slot-btn active" id="btn-bezier-1" onclick="selectBezierSlot(0)">Bezier 1</button>
+        <button class="slot-btn" id="btn-bezier-2" onclick="selectBezierSlot(1)" style="display:none">Bezier 2</button>
+      </div>
       <div class="sep"></div>
       <div id="opacity-wrap">
         <i class="ti ti-photo" aria-hidden="true" style="font-size:16px"></i>
