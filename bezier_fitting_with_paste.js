@@ -10,6 +10,7 @@ let showControlPoints = true;
 let bezierSlots = [];
 let activeBezierIndex = 0;
 let currentBezier = null, originalBezier = null, currentScale = 1;
+let dragState = { active: false, handle: null, startX: 0, startY: 0 };
 
 function createBezierSlot() {
   return { pts: [], drawing: false, bezier: null, originalBezier: null, scale: 1, errText: '' };
@@ -60,6 +61,23 @@ function getCurveHitSlot(x, y) {
     if (minDist <= threshold) return i;
   }
   return -1;
+}
+
+function getControlHandleAtPoint(slot, x, y) {
+  if (!slot || !slot.bezier) return null;
+  const handles = [
+    ['P0', slot.bezier.P0],
+    ['P1', slot.bezier.P1],
+    ['P2', slot.bezier.P2],
+    ['P3', slot.bezier.P3]
+  ];
+  const threshold = 8;
+  for (const [name, pt] of handles) {
+    const dx = pt.x - x;
+    const dy = pt.y - y;
+    if (Math.hypot(dx, dy) <= threshold) return name;
+  }
+  return null;
 }
 
 function selectBezierAtPoint(x, y) {
@@ -118,27 +136,62 @@ function getPos(e) {
 
 canvas.addEventListener('mousedown', e => {
   const pos = getPos(e);
+  const slot = getActiveSlot();
+  const handle = getControlHandleAtPoint(slot, pos.x, pos.y);
+  if (handle) {
+    dragState.active = true;
+    dragState.handle = handle;
+    dragState.startX = pos.x;
+    dragState.startY = pos.y;
+    return;
+  }
   if (selectBezierAtPoint(pos.x, pos.y)) {
     return;
   }
-  const slot = getActiveSlot();
   slot.drawing = true;
   slot.pts = [pos];
   render();
 });
 canvas.addEventListener('mousemove', e => {
   const slot = getActiveSlot();
+  const pos = getPos(e);
+  if (dragState.active && slot.bezier) {
+    const dx = pos.x - dragState.startX;
+    const dy = pos.y - dragState.startY;
+    const nextBezier = { ...slot.bezier };
+    nextBezier[dragState.handle] = {
+      x: slot.bezier[dragState.handle].x + dx,
+      y: slot.bezier[dragState.handle].y + dy
+    };
+    slot.bezier = nextBezier;
+    slot.originalBezier = cloneBezier(nextBezier);
+    slot.scale = 1;
+    syncActiveBezierState();
+    dragState.startX = pos.x;
+    dragState.startY = pos.y;
+    render();
+    drawFittedBezier(currentBezier, true);
+    updateControlPointInfo(currentBezier);
+    saveBezierToStorage();
+    return;
+  }
   if (!slot.drawing) return;
-  slot.pts.push(getPos(e));
+  slot.pts.push(pos);
   render();
 });
 canvas.addEventListener('mouseup', () => {
   const slot = getActiveSlot();
+  dragState.active = false;
+  dragState.handle = null;
   slot.drawing = false;
   refit();
 });
 canvas.addEventListener('mouseleave', () => {
   const slot = getActiveSlot();
+  if (dragState.active) {
+    dragState.active = false;
+    dragState.handle = null;
+  }
   if (slot.drawing) {
     slot.drawing = false;
     refit();
@@ -147,10 +200,18 @@ canvas.addEventListener('mouseleave', () => {
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
   const pos = getPos(e);
+  const slot = getActiveSlot();
+  const handle = getControlHandleAtPoint(slot, pos.x, pos.y);
+  if (handle) {
+    dragState.active = true;
+    dragState.handle = handle;
+    dragState.startX = pos.x;
+    dragState.startY = pos.y;
+    return;
+  }
   if (selectBezierAtPoint(pos.x, pos.y)) {
     return;
   }
-  const slot = getActiveSlot();
   slot.drawing = true;
   slot.pts = [pos];
   render();
@@ -158,12 +219,35 @@ canvas.addEventListener('touchstart', e => {
 canvas.addEventListener('touchmove', e => {
   e.preventDefault();
   const slot = getActiveSlot();
+  const pos = getPos(e);
+  if (dragState.active && slot.bezier) {
+    const dx = pos.x - dragState.startX;
+    const dy = pos.y - dragState.startY;
+    const nextBezier = { ...slot.bezier };
+    nextBezier[dragState.handle] = {
+      x: slot.bezier[dragState.handle].x + dx,
+      y: slot.bezier[dragState.handle].y + dy
+    };
+    slot.bezier = nextBezier;
+    slot.originalBezier = cloneBezier(nextBezier);
+    slot.scale = 1;
+    syncActiveBezierState();
+    dragState.startX = pos.x;
+    dragState.startY = pos.y;
+    render();
+    drawFittedBezier(currentBezier, true);
+    updateControlPointInfo(currentBezier);
+    saveBezierToStorage();
+    return;
+  }
   if (!slot.drawing) return;
-  slot.pts.push(getPos(e));
+  slot.pts.push(pos);
   render();
 }, { passive: false });
 canvas.addEventListener('touchend', () => {
   const slot = getActiveSlot();
+  dragState.active = false;
+  dragState.handle = null;
   slot.drawing = false;
   refit();
 });
