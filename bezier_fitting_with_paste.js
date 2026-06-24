@@ -35,6 +35,62 @@ function syncActiveBezierState() {
   currentScale = slot.scale;
 }
 
+function selectBezierSlot(index) {
+  if (index < 0 || index >= bezierSlots.length) return;
+  activeBezierIndex = index;
+  syncActiveBezierState();
+  refreshBezierButtons();
+  render();
+  updateControlPointInfo(currentBezier);
+}
+
+function getCurveHitSlot(x, y) {
+  const threshold = 10;
+  for (let i = 0; i < bezierSlots.length; i++) {
+    const slot = bezierSlots[i];
+    if (!slot.bezier) continue;
+    const sampled = sampleBezierByDistance(slot.bezier, 4);
+    let minDist = Infinity;
+    for (const p of sampled) {
+      const dx = p.x - x;
+      const dy = p.y - y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < minDist) minDist = dist;
+    }
+    if (minDist <= threshold) return i;
+  }
+  return -1;
+}
+
+function selectBezierAtPoint(x, y) {
+  const hitIndex = getCurveHitSlot(x, y);
+  if (hitIndex >= 0) {
+    selectBezierSlot(hitIndex);
+    return true;
+  }
+  return false;
+}
+
+function moveSelectedBezier(dx, dy) {
+  const slot = getActiveSlot();
+  if (!slot.bezier) return false;
+  const moved = {
+    P0: { x: slot.bezier.P0.x + dx, y: slot.bezier.P0.y + dy },
+    P1: { x: slot.bezier.P1.x + dx, y: slot.bezier.P1.y + dy },
+    P2: { x: slot.bezier.P2.x + dx, y: slot.bezier.P2.y + dy },
+    P3: { x: slot.bezier.P3.x + dx, y: slot.bezier.P3.y + dy }
+  };
+  slot.bezier = moved;
+  slot.originalBezier = cloneBezier(moved);
+  slot.scale = 1;
+  syncActiveBezierState();
+  render();
+  drawFittedBezier(currentBezier, true);
+  updateControlPointInfo(currentBezier);
+  saveBezierToStorage();
+  return true;
+}
+
 function refreshBezierButtons() {
   const btn1 = document.getElementById('btn-bezier-1');
   const btn2 = document.getElementById('btn-bezier-2');
@@ -61,9 +117,13 @@ function getPos(e) {
 }
 
 canvas.addEventListener('mousedown', e => {
+  const pos = getPos(e);
+  if (selectBezierAtPoint(pos.x, pos.y)) {
+    return;
+  }
   const slot = getActiveSlot();
   slot.drawing = true;
-  slot.pts = [getPos(e)];
+  slot.pts = [pos];
   render();
 });
 canvas.addEventListener('mousemove', e => {
@@ -86,9 +146,13 @@ canvas.addEventListener('mouseleave', () => {
 });
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
+  const pos = getPos(e);
+  if (selectBezierAtPoint(pos.x, pos.y)) {
+    return;
+  }
   const slot = getActiveSlot();
   slot.drawing = true;
-  slot.pts = [getPos(e)];
+  slot.pts = [pos];
   render();
 }, { passive: false });
 canvas.addEventListener('touchmove', e => {
@@ -102,6 +166,19 @@ canvas.addEventListener('touchend', () => {
   const slot = getActiveSlot();
   slot.drawing = false;
   refit();
+});
+
+window.addEventListener('keydown', e => {
+  if (e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+  const key = e.key.toLowerCase();
+  if (!['i', 'j', 'k', 'l'].includes(key)) return;
+  const delta = e.shiftKey ? 10 : 5;
+  let dx = 0, dy = 0;
+  if (key === 'j') dx = -delta;
+  else if (key === 'l') dx = delta;
+  else if (key === 'i') dy = -delta;
+  else if (key === 'k') dy = delta;
+  if (moveSelectedBezier(dx, dy)) e.preventDefault();
 });
 
 document.addEventListener('paste', e => {
@@ -572,15 +649,6 @@ function addBezierSlot() {
   render();
   updateControlPointInfo(currentBezier);
   showToast(`베지어 ${bezierSlots.length}번 슬롯을 추가했습니다`);
-}
-
-function selectBezierSlot(index) {
-  if (index < 0 || index >= bezierSlots.length) return;
-  activeBezierIndex = index;
-  syncActiveBezierState();
-  refreshBezierButtons();
-  render();
-  updateControlPointInfo(currentBezier);
 }
 
 function render() {
