@@ -109,6 +109,25 @@ function moveSelectedBezier(dx, dy) {
   return true;
 }
 
+function syncMatchingEndpoints(handleName, targetPoint) {
+  if (bezierSlots.length < 2) return;
+  const activeSlot = getActiveSlot();
+  const otherSlot = bezierSlots.find(slot => slot !== activeSlot);
+  if (!otherSlot || !otherSlot.bezier) return;
+  const isStartPoint = handleName === 'P0';
+  const isEndPoint = handleName === 'P3';
+  if (!isStartPoint && !isEndPoint) return;
+  const otherHandleName = isStartPoint ? 'P0' : 'P3';
+  const activeHandle = activeSlot.bezier[handleName];
+  const otherHandle = otherSlot.bezier[otherHandleName];
+  const dist = Math.hypot(activeHandle.x - otherHandle.x, activeHandle.y - otherHandle.y);
+  if (dist <= 8) {
+    otherSlot.bezier[otherHandleName] = { x: targetPoint.x, y: targetPoint.y };
+    otherSlot.originalBezier = cloneBezier(otherSlot.bezier);
+    otherSlot.scale = 1;
+  }
+}
+
 function refreshBezierButtons() {
   const btn1 = document.getElementById('btn-bezier-1');
   const btn2 = document.getElementById('btn-bezier-2');
@@ -159,11 +178,15 @@ canvas.addEventListener('mousemove', e => {
     const dx = pos.x - dragState.startX;
     const dy = pos.y - dragState.startY;
     const nextBezier = { ...slot.bezier };
-    nextBezier[dragState.handle] = {
+    const movedPoint = {
       x: slot.bezier[dragState.handle].x + dx,
       y: slot.bezier[dragState.handle].y + dy
     };
+    nextBezier[dragState.handle] = movedPoint;
     slot.bezier = nextBezier;
+    if (['P0', 'P3'].includes(dragState.handle)) {
+      syncMatchingEndpoints(dragState.handle, movedPoint);
+    }
     slot.originalBezier = cloneBezier(nextBezier);
     slot.scale = 1;
     syncActiveBezierState();
@@ -224,11 +247,15 @@ canvas.addEventListener('touchmove', e => {
     const dx = pos.x - dragState.startX;
     const dy = pos.y - dragState.startY;
     const nextBezier = { ...slot.bezier };
-    nextBezier[dragState.handle] = {
+    const movedPoint = {
       x: slot.bezier[dragState.handle].x + dx,
       y: slot.bezier[dragState.handle].y + dy
     };
+    nextBezier[dragState.handle] = movedPoint;
     slot.bezier = nextBezier;
+    if (['P0', 'P3'].includes(dragState.handle)) {
+      syncMatchingEndpoints(dragState.handle, movedPoint);
+    }
     slot.originalBezier = cloneBezier(nextBezier);
     slot.scale = 1;
     syncActiveBezierState();
