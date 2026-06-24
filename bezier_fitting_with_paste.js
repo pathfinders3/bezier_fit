@@ -133,15 +133,25 @@ function syncMatchingEndpoints(handleName, targetPoint) {
   }
 }
 
-function moveLinkedEndpoints(dx, dy) {
+function moveLinkedCurves(dx, dy) {
   linkedEndpoints.forEach(link => {
     const slot = bezierSlots[link.slotIndex];
     const linkedSlot = bezierSlots[link.linkedSlotIndex];
     if (!slot || !slot.bezier || !linkedSlot || !linkedSlot.bezier) return;
-    const activePoint = slot.bezier[link.handleName];
-    const nextPoint = { x: activePoint.x + dx, y: activePoint.y + dy };
-    slot.bezier[link.handleName] = nextPoint;
-    linkedSlot.bezier[link.linkedHandleName] = { x: nextPoint.x, y: nextPoint.y };
+    const movePoint = point => ({ x: point.x + dx, y: point.y + dy });
+
+    slot.bezier = {
+      P0: movePoint(slot.bezier.P0),
+      P1: movePoint(slot.bezier.P1),
+      P2: movePoint(slot.bezier.P2),
+      P3: movePoint(slot.bezier.P3)
+    };
+    linkedSlot.bezier = {
+      P0: movePoint(linkedSlot.bezier.P0),
+      P1: movePoint(linkedSlot.bezier.P1),
+      P2: movePoint(linkedSlot.bezier.P2),
+      P3: movePoint(linkedSlot.bezier.P3)
+    };
     slot.originalBezier = cloneBezier(slot.bezier);
     linkedSlot.originalBezier = cloneBezier(linkedSlot.bezier);
     slot.scale = 1;
@@ -311,7 +321,7 @@ window.addEventListener('keydown', e => {
   else if (key === 'i') dy = -delta;
   else if (key === 'k') dy = delta;
   if (moveSelectedBezier(dx, dy)) {
-    moveLinkedEndpoints(dx, dy);
+    moveLinkedCurves(dx, dy);
     render();
     drawFittedBezier(currentBezier, true);
     updateControlPointInfo(currentBezier);
