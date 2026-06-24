@@ -106,10 +106,16 @@ function translateBezierCurve(slot, dx, dy) {
 
 function moveSelectedBezier(dx, dy) {
   const slot = getActiveSlot();
-  if (!translateBezierCurve(slot, dx, dy)) return false;
+  if (!slot || !slot.bezier) return false;
+  translateBezierCurve(slot, dx, dy);
+  if (linkedEndpoints.length > 0) {
+    moveLinkedCurves(dx, dy);
+  }
   syncActiveBezierState();
   render();
-  drawFittedBezier(currentBezier, true);
+  bezierSlots.forEach((curveSlot, index) => {
+    if (curveSlot.bezier) drawFittedBezier(curveSlot.bezier, index === activeBezierIndex);
+  });
   updateControlPointInfo(currentBezier);
   saveBezierToStorage();
   return true;
@@ -310,13 +316,6 @@ window.addEventListener('keydown', e => {
   else if (key === 'i') dy = -delta;
   else if (key === 'k') dy = delta;
   if (moveSelectedBezier(dx, dy)) {
-    moveLinkedCurves(dx, dy);
-    render();
-    bezierSlots.forEach((slot, index) => {
-      if (slot.bezier) drawFittedBezier(slot.bezier, index === activeBezierIndex);
-    });
-    updateControlPointInfo(currentBezier);
-    saveBezierToStorage();
     e.preventDefault();
   }
 });
