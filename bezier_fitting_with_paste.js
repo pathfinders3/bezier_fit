@@ -149,6 +149,13 @@ function syncMatchingEndpoints(handleName, activeSlot, nextBezier) {
   const dist = Math.hypot(activeHandle.x - otherHandle.x, activeHandle.y - otherHandle.y);
   if (dist <= 8) {
     nextBezier[handleName] = { x: otherHandle.x, y: otherHandle.y };
+    if (bezierSlots.length > 1) {
+      const otherSlotIndex = bezierSlots.findIndex(slot => slot === otherSlot);
+      selectedBezierIndices = [...new Set([activeBezierIndex, otherSlotIndex])].slice(-2);
+      normalizeSelectedBezierIndices();
+      refreshBezierButtons();
+      render();
+    }
   }
 }
 
