@@ -7,6 +7,7 @@ const BEZIER_STORAGE_KEY = 'bezier_fit:last_control_points';
 const BG_IMAGE_STORAGE_KEY = 'bezier_fit:last_background_image';
 let bgImage = null, bgOpacity = 0.35;
 let showControlPoints = true;
+let isDrawMode = true;
 let bezierSlots = [];
 let activeBezierIndex = 0;
 let selectedBezierIndices = [0];
@@ -14,6 +15,20 @@ let mergedControlPointsCount = 0;
 let linkedHandleState = null;
 let currentBezier = null, originalBezier = null, currentScale = 1;
 let dragState = { active: false, handle: null, startX: 0, startY: 0 };
+
+function updateCanvasCursor() {
+  canvas.style.cursor = isDrawMode ? 'crosshair' : 'default';
+}
+
+function toggleDrawMode(checked) {
+  isDrawMode = !!checked;
+  const slot = getActiveSlot();
+  slot.drawing = false;
+  dragState.active = false;
+  dragState.handle = null;
+  updateCanvasCursor();
+  showToast(isDrawMode ? '직접 그리기 모드' : '베지어 편집 모드');
+}
 
 function createBezierSlot() {
   return { pts: [], drawing: false, bezier: null, originalBezier: null, scale: 1, errText: '' };
@@ -66,6 +81,10 @@ function setLinkedHandleState(slotIndex, handleName, otherSlotIndex, otherHandle
 }
 
 function selectBezierSlot(index, additive = false) {
+  if (isDrawMode) {
+    showToast('직접 그리기 모드에서는 베지어 선택을 사용할 수 없습니다');
+    return;
+  }
   ensureBezierSlots();
   if (index < 0 || index >= bezierSlots.length) return;
   if (additive) {
@@ -283,13 +302,20 @@ function getPos(e) {
 
 canvas.addEventListener('mousedown', e => {
   const pos = getPos(e);
+  const slot = getActiveSlot();
+
+  if (isDrawMode) {
+    slot.drawing = true;
+    slot.pts = [pos];
+    render();
+    return;
+  }
 
   // Shift+click is reserved for multi-selecting up to two curves.
   if (e.shiftKey && selectBezierAtPoint(pos.x, pos.y, true)) {
     return;
   }
 
-  const slot = getActiveSlot();
   const handle = getControlHandleAtPoint(slot, pos.x, pos.y);
   if (handle) {
     dragState.active = true;
@@ -301,13 +327,16 @@ canvas.addEventListener('mousedown', e => {
   if (selectBezierAtPoint(pos.x, pos.y, e.shiftKey)) {
     return;
   }
-  slot.drawing = true;
-  slot.pts = [pos];
-  render();
 });
 canvas.addEventListener('mousemove', e => {
   const slot = getActiveSlot();
   const pos = getPos(e);
+  if (isDrawMode) {
+    if (!slot.drawing) return;
+    slot.pts.push(pos);
+    render();
+    return;
+  }
   if (dragState.active && slot.bezier) {
     const dx = pos.x - dragState.startX;
     const dy = pos.y - dragState.startY;
@@ -321,16 +350,15 @@ canvas.addEventListener('mousemove', e => {
     saveBezierToStorage();
     return;
   }
-  if (!slot.drawing) return;
-  slot.pts.push(pos);
-  render();
 });
 canvas.addEventListener('mouseup', () => {
   const slot = getActiveSlot();
   dragState.active = false;
   dragState.handle = null;
-  slot.drawing = false;
-  refit();
+  if (isDrawMode && slot.drawing) {
+    slot.drawing = false;
+    refit();
+  }
 });
 canvas.addEventListener('mouseleave', () => {
   const slot = getActiveSlot();
@@ -340,13 +368,19 @@ canvas.addEventListener('mouseleave', () => {
   }
   if (slot.drawing) {
     slot.drawing = false;
-    refit();
+    if (isDrawMode) refit();
   }
 });
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
   const pos = getPos(e);
   const slot = getActiveSlot();
+  if (isDrawMode) {
+    slot.drawing = true;
+    slot.pts = [pos];
+    render();
+    return;
+  }
   const handle = getControlHandleAtPoint(slot, pos.x, pos.y);
   if (handle) {
     dragState.active = true;
@@ -358,14 +392,17 @@ canvas.addEventListener('touchstart', e => {
   if (selectBezierAtPoint(pos.x, pos.y)) {
     return;
   }
-  slot.drawing = true;
-  slot.pts = [pos];
-  render();
 }, { passive: false });
 canvas.addEventListener('touchmove', e => {
   e.preventDefault();
   const slot = getActiveSlot();
   const pos = getPos(e);
+  if (isDrawMode) {
+    if (!slot.drawing) return;
+    slot.pts.push(pos);
+    render();
+    return;
+  }
   if (dragState.active && slot.bezier) {
     const dx = pos.x - dragState.startX;
     const dy = pos.y - dragState.startY;
@@ -379,21 +416,22 @@ canvas.addEventListener('touchmove', e => {
     saveBezierToStorage();
     return;
   }
-  if (!slot.drawing) return;
-  slot.pts.push(pos);
-  render();
 }, { passive: false });
 canvas.addEventListener('touchend', () => {
   const slot = getActiveSlot();
   dragState.active = false;
   dragState.handle = null;
-  slot.drawing = false;
-  refit();
+  if (isDrawMode && slot.drawing) {
+    slot.drawing = false;
+    refit();
+  }
 });
 
 window.addEventListener('keydown', e => {
   if (e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
   const key = e.key.toLowerCase();
+
+  if (isDrawMode) return;
 
   if (key === 'tab' && mergedControlPointsCount > 0) {
     if (releaseMergedControlPoints()) e.preventDefault();
@@ -773,6 +811,10 @@ function angleFromPoints(a, b) {
 }
 
 async function exportBezierJsonToClipboard() {
+  if (isDrawMode) {
+    showToast('베지어 편집 모드에서만 사용할 수 있습니다');
+    return;
+  }
   if (!currentBezier) {
     showToast('먼저 곡선을 피팅해 주세요');
     return;
@@ -853,6 +895,10 @@ function scaleBezier(cp, factor) {
 }
 
 function applyBezierScale(factor) {
+  if (isDrawMode) {
+    showToast('베지어 편집 모드에서만 사용할 수 있습니다');
+    return;
+  }
   const slot = getActiveSlot();
   if (!slot.bezier) {
     showToast('먼저 곡선을 피팅해 주세요');
@@ -871,6 +917,10 @@ function applyBezierScale(factor) {
 }
 
 function addBezierSlot() {
+  if (isDrawMode) {
+    showToast('베지어 편집 모드에서만 사용할 수 있습니다');
+    return;
+  }
   if (bezierSlots.length >= 2) {
     showToast('베지어 곡선은 최대 2개까지 추가할 수 있습니다');
     return;
@@ -995,6 +1045,7 @@ function clearStoredBackground() {
 
 ensureBezierSlots();
 refreshBezierButtons();
+updateCanvasCursor();
 render();
 const savedCp = loadBezierFromStorage();
 if (savedCp) {

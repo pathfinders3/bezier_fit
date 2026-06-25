@@ -92,6 +92,11 @@
         <span id="opacity-val" style="min-width:30px">35%</span>
       </div>
       <div class="sep"></div>
+      <label for="chk-draw-mode" class="control-toggle" title="ON: 직접 그리기 / OFF: 베지어 편집">
+        <input type="checkbox" id="chk-draw-mode" checked onchange="toggleDrawMode(this.checked)">
+        <span>직접 그리기 모드</span>
+      </label>
+      <div class="sep"></div>
       <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#c3cddd;">
         <span>샘플 수</span>
         <input type="range" min="5" max="60" value="20" step="1" id="sld-n" style="width:80px" oninput="document.getElementById('n-val').textContent=this.value; refit()">
