@@ -164,22 +164,23 @@ function updateDraggedHandle(slot, handleName, dx, dy) {
 
   if (mergedControlPointsCount > 0 && ['P0', 'P3'].includes(handleName)) {
     const slotIndex = bezierSlots.findIndex(candidate => candidate === slot);
-    const otherSlotIndex = linkedHandleState && linkedHandleState.slotIndex === slotIndex && linkedHandleState.handleName === handleName
-      ? linkedHandleState.otherSlotIndex
-      : -1;
-    const otherSlot = otherSlotIndex >= 0 ? bezierSlots[otherSlotIndex] : bezierSlots.find(candidate => candidate !== slot);
-    if (otherSlot && otherSlot.bezier) {
-      const otherHandleName = linkedHandleState && linkedHandleState.slotIndex === slotIndex && linkedHandleState.handleName === handleName
-        ? linkedHandleState.otherHandleName
-        : (handleName === 'P0' ? 'P0' : 'P3');
-      const otherNextBezier = { ...otherSlot.bezier };
-      otherNextBezier[otherHandleName] = {
-        x: otherSlot.bezier[otherHandleName].x + dx,
-        y: otherSlot.bezier[otherHandleName].y + dy
-      };
-      otherSlot.bezier = otherNextBezier;
-      otherSlot.originalBezier = cloneBezier(otherNextBezier);
-      otherSlot.scale = 1;
+    const isLinkedHandle = linkedHandleState && linkedHandleState.slotIndex === slotIndex && linkedHandleState.handleName === handleName;
+    const isLinkedOtherHandle = linkedHandleState && linkedHandleState.otherSlotIndex === slotIndex && linkedHandleState.otherHandleName === handleName;
+
+    if (isLinkedHandle || isLinkedOtherHandle) {
+      const otherSlotIndex = isLinkedHandle ? linkedHandleState.otherSlotIndex : linkedHandleState.slotIndex;
+      const otherHandleName = isLinkedHandle ? linkedHandleState.otherHandleName : linkedHandleState.handleName;
+      const otherSlot = bezierSlots[otherSlotIndex];
+      if (otherSlot && otherSlot.bezier) {
+        const otherNextBezier = { ...otherSlot.bezier };
+        otherNextBezier[otherHandleName] = {
+          x: otherSlot.bezier[otherHandleName].x + dx,
+          y: otherSlot.bezier[otherHandleName].y + dy
+        };
+        otherSlot.bezier = otherNextBezier;
+        otherSlot.originalBezier = cloneBezier(otherNextBezier);
+        otherSlot.scale = 1;
+      }
     }
   }
 
