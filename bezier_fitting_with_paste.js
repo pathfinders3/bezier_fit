@@ -136,9 +136,8 @@ function moveSelectedBezier(dx, dy) {
   return true;
 }
 
-function syncMatchingEndpoints(handleName, targetPoint) {
-  if (bezierSlots.length < 2) return;
-  const activeSlot = getActiveSlot();
+function syncMatchingEndpoints(handleName, activeSlot, nextBezier) {
+  if (bezierSlots.length < 2 || !activeSlot || !activeSlot.bezier) return;
   const otherSlot = bezierSlots.find(slot => slot !== activeSlot);
   if (!otherSlot || !otherSlot.bezier) return;
   const isStartPoint = handleName === 'P0';
@@ -149,9 +148,7 @@ function syncMatchingEndpoints(handleName, targetPoint) {
   const otherHandle = otherSlot.bezier[otherHandleName];
   const dist = Math.hypot(activeHandle.x - otherHandle.x, activeHandle.y - otherHandle.y);
   if (dist <= 8) {
-    otherSlot.bezier[otherHandleName] = { x: targetPoint.x, y: targetPoint.y };
-    otherSlot.originalBezier = cloneBezier(otherSlot.bezier);
-    otherSlot.scale = 1;
+    nextBezier[handleName] = { x: otherHandle.x, y: otherHandle.y };
   }
 }
 
@@ -221,7 +218,7 @@ canvas.addEventListener('mousemove', e => {
     nextBezier[dragState.handle] = movedPoint;
     slot.bezier = nextBezier;
     if (['P0', 'P3'].includes(dragState.handle)) {
-      syncMatchingEndpoints(dragState.handle, movedPoint);
+      syncMatchingEndpoints(dragState.handle, slot, nextBezier);
     }
     slot.originalBezier = cloneBezier(nextBezier);
     slot.scale = 1;
@@ -290,7 +287,7 @@ canvas.addEventListener('touchmove', e => {
     nextBezier[dragState.handle] = movedPoint;
     slot.bezier = nextBezier;
     if (['P0', 'P3'].includes(dragState.handle)) {
-      syncMatchingEndpoints(dragState.handle, movedPoint);
+      syncMatchingEndpoints(dragState.handle, slot, nextBezier);
     }
     slot.originalBezier = cloneBezier(nextBezier);
     slot.scale = 1;
