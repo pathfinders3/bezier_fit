@@ -11,7 +11,6 @@ let bezierSlots = [];
 let activeBezierIndex = 0;
 let currentBezier = null, originalBezier = null, currentScale = 1;
 let dragState = { active: false, handle: null, startX: 0, startY: 0 };
-let linkedEndpoints = [];
 
 function createBezierSlot() {
   return { pts: [], drawing: false, bezier: null, originalBezier: null, scale: 1, errText: '' };
@@ -123,30 +122,10 @@ function syncMatchingEndpoints(handleName, targetPoint) {
   const otherHandle = otherSlot.bezier[otherHandleName];
   const dist = Math.hypot(activeHandle.x - otherHandle.x, activeHandle.y - otherHandle.y);
   if (dist <= 8) {
-    const exists = linkedEndpoints.some(item => item.handleName === handleName && item.slotIndex === activeBezierIndex);
-    if (!exists) {
-      linkedEndpoints.push({ slotIndex: activeBezierIndex, handleName, linkedSlotIndex: bezierSlots.indexOf(otherSlot), linkedHandleName: otherHandleName });
-    }
     otherSlot.bezier[otherHandleName] = { x: targetPoint.x, y: targetPoint.y };
     otherSlot.originalBezier = cloneBezier(otherSlot.bezier);
     otherSlot.scale = 1;
   }
-}
-
-function moveLinkedEndpoints(dx, dy) {
-  linkedEndpoints.forEach(link => {
-    const slot = bezierSlots[link.slotIndex];
-    const linkedSlot = bezierSlots[link.linkedSlotIndex];
-    if (!slot || !slot.bezier || !linkedSlot || !linkedSlot.bezier) return;
-    const activePoint = slot.bezier[link.handleName];
-    const nextPoint = { x: activePoint.x + dx, y: activePoint.y + dy };
-    slot.bezier[link.handleName] = nextPoint;
-    linkedSlot.bezier[link.linkedHandleName] = { x: nextPoint.x, y: nextPoint.y };
-    slot.originalBezier = cloneBezier(slot.bezier);
-    linkedSlot.originalBezier = cloneBezier(linkedSlot.bezier);
-    slot.scale = 1;
-    linkedSlot.scale = 1;
-  });
 }
 
 function refreshBezierButtons() {
@@ -310,14 +289,7 @@ window.addEventListener('keydown', e => {
   else if (key === 'l') dx = delta;
   else if (key === 'i') dy = -delta;
   else if (key === 'k') dy = delta;
-  if (moveSelectedBezier(dx, dy)) {
-    moveLinkedEndpoints(dx, dy);
-    render();
-    drawFittedBezier(currentBezier, true);
-    updateControlPointInfo(currentBezier);
-    saveBezierToStorage();
-    e.preventDefault();
-  }
+  if (moveSelectedBezier(dx, dy)) e.preventDefault();
 });
 
 document.addEventListener('paste', e => {
