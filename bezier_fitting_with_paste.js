@@ -10,7 +10,7 @@ let showControlPoints = true;
 let bezierSlots = [];
 let activeBezierIndex = 0;
 let selectedBezierIndices = [0];
-let mergedControlPoints = false;
+let mergedControlPointsCount = 0;
 let currentBezier = null, originalBezier = null, currentScale = 1;
 let dragState = { active: false, handle: null, startX: 0, startY: 0 };
 
@@ -23,7 +23,7 @@ function ensureBezierSlots() {
     bezierSlots = [createBezierSlot()];
     activeBezierIndex = 0;
     selectedBezierIndices = [0];
-    mergedControlPoints = false;
+    mergedControlPointsCount = 0;
   }
   return bezierSlots;
 }
@@ -51,7 +51,7 @@ function normalizeSelectedBezierIndices() {
 }
 
 function setMergedControlPointsState(value) {
-  mergedControlPoints = !!value;
+  mergedControlPointsCount = Math.max(0, Number(value) || 0);
 }
 
 function selectBezierSlot(index, additive = false) {
@@ -62,7 +62,7 @@ function selectBezierSlot(index, additive = false) {
   } else {
     selectedBezierIndices = [index];
   }
-  setMergedControlPointsState(false);
+  setMergedControlPointsState(0);
   activeBezierIndex = index;
   normalizeSelectedBezierIndices();
   syncActiveBezierState();
@@ -156,7 +156,7 @@ function syncMatchingEndpoints(handleName, activeSlot, nextBezier) {
   const dist = Math.hypot(activeHandle.x - otherHandle.x, activeHandle.y - otherHandle.y);
   if (dist <= 8) {
     nextBezier[handleName] = { x: otherHandle.x, y: otherHandle.y };
-    setMergedControlPointsState(true);
+    setMergedControlPointsState(mergedControlPointsCount + 1);
     if (bezierSlots.length > 1) {
       const otherSlotIndex = bezierSlots.findIndex(slot => slot === otherSlot);
       selectedBezierIndices = [...new Set([activeBezierIndex, otherSlotIndex])].slice(-2);
