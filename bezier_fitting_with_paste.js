@@ -9,6 +9,7 @@ let bgImage = null, bgOpacity = 0.35;
 let showControlPoints = true;
 let bezierSlots = [];
 let activeBezierIndex = 0;
+let selectedBezierIndices = [0];
 let currentBezier = null, originalBezier = null, currentScale = 1;
 let dragState = { active: false, handle: null, startX: 0, startY: 0 };
 
@@ -20,6 +21,7 @@ function ensureBezierSlots() {
   if (bezierSlots.length === 0) {
     bezierSlots = [createBezierSlot()];
     activeBezierIndex = 0;
+    selectedBezierIndices = [0];
   }
   return bezierSlots;
 }
@@ -36,9 +38,26 @@ function syncActiveBezierState() {
   currentScale = slot.scale;
 }
 
-function selectBezierSlot(index) {
+function normalizeSelectedBezierIndices() {
+  selectedBezierIndices = selectedBezierIndices
+    .filter(i => Number.isInteger(i) && i >= 0 && i < bezierSlots.length)
+    .slice(0, 2);
+
+  if (!selectedBezierIndices.includes(activeBezierIndex)) {
+    selectedBezierIndices = [activeBezierIndex, ...selectedBezierIndices].slice(0, 2);
+  }
+}
+
+function selectBezierSlot(index, additive = false) {
+  ensureBezierSlots();
   if (index < 0 || index >= bezierSlots.length) return;
+  if (additive) {
+    selectedBezierIndices = [...new Set([...selectedBezierIndices, index])].slice(-2);
+  } else {
+    selectedBezierIndices = [index];
+  }
   activeBezierIndex = index;
+  normalizeSelectedBezierIndices();
   syncActiveBezierState();
   refreshBezierButtons();
   render();
@@ -80,27 +99,35 @@ function getControlHandleAtPoint(slot, x, y) {
   return null;
 }
 
-function selectBezierAtPoint(x, y) {
+function selectBezierAtPoint(x, y, additive = false) {
   const hitIndex = getCurveHitSlot(x, y);
   if (hitIndex >= 0) {
-    selectBezierSlot(hitIndex);
+    selectBezierSlot(hitIndex, additive);
     return true;
   }
   return false;
 }
 
 function moveSelectedBezier(dx, dy) {
-  const slot = getActiveSlot();
-  if (!slot.bezier) return false;
-  const moved = {
-    P0: { x: slot.bezier.P0.x + dx, y: slot.bezier.P0.y + dy },
-    P1: { x: slot.bezier.P1.x + dx, y: slot.bezier.P1.y + dy },
-    P2: { x: slot.bezier.P2.x + dx, y: slot.bezier.P2.y + dy },
-    P3: { x: slot.bezier.P3.x + dx, y: slot.bezier.P3.y + dy }
-  };
-  slot.bezier = moved;
-  slot.originalBezier = cloneBezier(moved);
-  slot.scale = 1;
+  const targets = selectedBezierIndices.length > 0 ? selectedBezierIndices : [activeBezierIndex];
+  let movedAny = false;
+
+  for (const index of targets) {
+    const slot = bezierSlots[index];
+    if (!slot || !slot.bezier) continue;
+    const moved = {
+      P0: { x: slot.bezier.P0.x + dx, y: slot.bezier.P0.y + dy },
+      P1: { x: slot.bezier.P1.x + dx, y: slot.bezier.P1.y + dy },
+      P2: { x: slot.bezier.P2.x + dx, y: slot.bezier.P2.y + dy },
+      P3: { x: slot.bezier.P3.x + dx, y: slot.bezier.P3.y + dy }
+    };
+    slot.bezier = moved;
+    slot.originalBezier = cloneBezier(moved);
+    slot.scale = 1;
+    movedAny = true;
+  }
+
+  if (!movedAny) return false;
   syncActiveBezierState();
   render();
   drawFittedBezier(currentBezier, true);
@@ -132,8 +159,11 @@ function refreshBezierButtons() {
   const btn1 = document.getElementById('btn-bezier-1');
   const btn2 = document.getElementById('btn-bezier-2');
   if (!btn1 || !btn2) return;
+  normalizeSelectedBezierIndices();
   btn1.classList.toggle('active', activeBezierIndex === 0);
   btn2.classList.toggle('active', activeBezierIndex === 1);
+  btn1.classList.toggle('selected', selectedBezierIndices.includes(0));
+  btn2.classList.toggle('selected', selectedBezierIndices.includes(1));
   btn2.style.display = bezierSlots.length > 1 ? 'inline-block' : 'none';
 }
 
@@ -155,6 +185,12 @@ function getPos(e) {
 
 canvas.addEventListener('mousedown', e => {
   const pos = getPos(e);
+
+  // Shift+click is reserved for multi-selecting up to two curves.
+  if (e.shiftKey && selectBezierAtPoint(pos.x, pos.y, true)) {
+    return;
+  }
+
   const slot = getActiveSlot();
   const handle = getControlHandleAtPoint(slot, pos.x, pos.y);
   if (handle) {
@@ -164,7 +200,7 @@ canvas.addEventListener('mousedown', e => {
     dragState.startY = pos.y;
     return;
   }
-  if (selectBezierAtPoint(pos.x, pos.y)) {
+  if (selectBezierAtPoint(pos.x, pos.y, e.shiftKey)) {
     return;
   }
   slot.drawing = true;
@@ -412,6 +448,7 @@ function loadBezierFromStorage() {
         return slot;
       });
       activeBezierIndex = Number.isInteger(parsed.activeIndex) && parsed.activeIndex < bezierSlots.length ? parsed.activeIndex : 0;
+      selectedBezierIndices = [activeBezierIndex];
       syncActiveBezierState();
       refreshBezierButtons();
       return true;
@@ -422,6 +459,7 @@ function loadBezierFromStorage() {
       bezierSlots[0].originalBezier = cloneBezier(parsed);
       bezierSlots[0].scale = 1;
       activeBezierIndex = 0;
+      selectedBezierIndices = [0];
       syncActiveBezierState();
       refreshBezierButtons();
       return true;
@@ -551,12 +589,12 @@ function drawRawCurve(points, color = '#6B7FD4') {
   ctx.stroke();
 }
 
-function drawFittedBezier(cp, isActive = false) {
+function drawFittedBezier(cp, isActive = false, isSelected = false) {
   ctx.beginPath();
   ctx.moveTo(cp.P0.x, cp.P0.y);
   ctx.bezierCurveTo(cp.P1.x, cp.P1.y, cp.P2.x, cp.P2.y, cp.P3.x, cp.P3.y);
-  ctx.strokeStyle = isActive ? '#E26B2C' : '#C46A2D';
-  ctx.lineWidth = isActive ? 2.5 : 2;
+  ctx.strokeStyle = isActive ? '#E26B2C' : (isSelected ? '#D48A4F' : '#C46A2D');
+  ctx.lineWidth = isActive ? 2.5 : (isSelected ? 2.3 : 2);
   ctx.stroke();
 
   if (!showControlPoints) return;
@@ -755,6 +793,7 @@ function addBezierSlot() {
   }
   bezierSlots.push(createBezierSlot());
   activeBezierIndex = bezierSlots.length - 1;
+  selectedBezierIndices = [activeBezierIndex];
   syncActiveBezierState();
   refreshBezierButtons();
   render();
@@ -784,7 +823,7 @@ function render() {
       drawRawCurve(slot.pts, index === activeBezierIndex ? '#6B7FD4' : '#4F5F80');
     }
     if (slot.bezier) {
-      drawFittedBezier(slot.bezier, index === activeBezierIndex);
+      drawFittedBezier(slot.bezier, index === activeBezierIndex, selectedBezierIndices.includes(index));
     }
   });
 }
@@ -842,6 +881,7 @@ function clearAll() {
   removeBackgroundFromStorage();
   bezierSlots = [createBezierSlot()];
   activeBezierIndex = 0;
+  selectedBezierIndices = [0];
   syncActiveBezierState();
   refreshBezierButtons();
   render();
