@@ -90,8 +90,9 @@ function selectBezierAtPoint(x, y) {
   return false;
 }
 
-function translateBezierCurve(slot, dx, dy) {
-  if (!slot || !slot.bezier) return false;
+function moveSelectedBezier(dx, dy) {
+  const slot = getActiveSlot();
+  if (!slot.bezier) return false;
   const moved = {
     P0: { x: slot.bezier.P0.x + dx, y: slot.bezier.P0.y + dy },
     P1: { x: slot.bezier.P1.x + dx, y: slot.bezier.P1.y + dy },
@@ -101,21 +102,9 @@ function translateBezierCurve(slot, dx, dy) {
   slot.bezier = moved;
   slot.originalBezier = cloneBezier(moved);
   slot.scale = 1;
-  return true;
-}
-
-function moveSelectedBezier(dx, dy) {
-  const slot = getActiveSlot();
-  if (!slot || !slot.bezier) return false;
-  translateBezierCurve(slot, dx, dy);
-  if (linkedEndpoints.length > 0) {
-    moveLinkedCurves(dx, dy);
-  }
   syncActiveBezierState();
   render();
-  bezierSlots.forEach((curveSlot, index) => {
-    if (curveSlot.bezier) drawFittedBezier(curveSlot.bezier, index === activeBezierIndex);
-  });
+  drawFittedBezier(currentBezier, true);
   updateControlPointInfo(currentBezier);
   saveBezierToStorage();
   return true;
@@ -144,13 +133,19 @@ function syncMatchingEndpoints(handleName, targetPoint) {
   }
 }
 
-function moveLinkedCurves(dx, dy) {
+function moveLinkedEndpoints(dx, dy) {
   linkedEndpoints.forEach(link => {
     const slot = bezierSlots[link.slotIndex];
     const linkedSlot = bezierSlots[link.linkedSlotIndex];
     if (!slot || !slot.bezier || !linkedSlot || !linkedSlot.bezier) return;
-    translateBezierCurve(slot, dx, dy);
-    translateBezierCurve(linkedSlot, dx, dy);
+    const activePoint = slot.bezier[link.handleName];
+    const nextPoint = { x: activePoint.x + dx, y: activePoint.y + dy };
+    slot.bezier[link.handleName] = nextPoint;
+    linkedSlot.bezier[link.linkedHandleName] = { x: nextPoint.x, y: nextPoint.y };
+    slot.originalBezier = cloneBezier(slot.bezier);
+    linkedSlot.originalBezier = cloneBezier(linkedSlot.bezier);
+    slot.scale = 1;
+    linkedSlot.scale = 1;
   });
 }
 
@@ -316,6 +311,11 @@ window.addEventListener('keydown', e => {
   else if (key === 'i') dy = -delta;
   else if (key === 'k') dy = delta;
   if (moveSelectedBezier(dx, dy)) {
+    moveLinkedEndpoints(dx, dy);
+    render();
+    drawFittedBezier(currentBezier, true);
+    updateControlPointInfo(currentBezier);
+    saveBezierToStorage();
     e.preventDefault();
   }
 });
