@@ -590,11 +590,13 @@ function drawRawCurve(points, color = '#6B7FD4') {
 }
 
 function drawFittedBezier(cp, isActive = false, isSelected = false) {
+  const slotIndex = bezierSlots.findIndex(slot => slot.bezier === cp);
+  const resolvedSelected = isSelected || (slotIndex >= 0 && selectedBezierIndices.includes(slotIndex));
   ctx.beginPath();
   ctx.moveTo(cp.P0.x, cp.P0.y);
   ctx.bezierCurveTo(cp.P1.x, cp.P1.y, cp.P2.x, cp.P2.y, cp.P3.x, cp.P3.y);
-  ctx.strokeStyle = isActive ? '#E26B2C' : (isSelected ? '#D48A4F' : '#C46A2D');
-  ctx.lineWidth = isActive ? 2.5 : (isSelected ? 2.3 : 2);
+  ctx.strokeStyle = resolvedSelected ? '#4F7CFF' : (isActive ? '#E26B2C' : '#C46A2D');
+  ctx.lineWidth = resolvedSelected ? 2.5 : (isActive ? 2.5 : 2);
   ctx.stroke();
 
   if (!showControlPoints) return;
