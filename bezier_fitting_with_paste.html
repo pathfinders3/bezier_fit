@@ -39,6 +39,7 @@
     .info-val { font-size: 13px; font-weight: 500; font-family: var(--font-mono); }
     .info-actions { display: flex; justify-content: center; margin-top: 8px; }
     .control-toggle { display:flex; align-items:center; gap:6px; font-size:13px; color:#c3cddd; user-select:none; }
+    .mode-toggle-wrap { display:flex; align-items:center; gap:12px; font-size:13px; color:#c3cddd; }
     .sep { width: 0.5px; background: #344156; align-self: stretch; }
     #toast { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: #121923; border: 0.5px solid #344156; border-radius: var(--border-radius-md); padding: 6px 14px; font-size: 13px; color: #e8edf5; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; z-index: 10; }
     #toast.show { opacity: 1; }
@@ -96,6 +97,17 @@
         <span>샘플 수</span>
         <input type="range" min="5" max="60" value="20" step="1" id="sld-n" style="width:80px" oninput="document.getElementById('n-val').textContent=this.value; refit()">
         <span id="n-val" style="min-width:20px">20</span>
+      </div>
+      <div class="sep"></div>
+      <div class="mode-toggle-wrap">
+        <label for="chk-mode-draw" class="control-toggle" title="직접 선 그리기 모드">
+          <input type="checkbox" id="chk-mode-draw" checked onchange="setInteractionMode('draw', this.checked)">
+          <span>직접 그리기</span>
+        </label>
+        <label for="chk-mode-bezier" class="control-toggle" title="베지어 선택/제어점 이동 모드">
+          <input type="checkbox" id="chk-mode-bezier" onchange="setInteractionMode('bezier', this.checked)">
+          <span>베지어 모드</span>
+        </label>
       </div>
     </div>
 
