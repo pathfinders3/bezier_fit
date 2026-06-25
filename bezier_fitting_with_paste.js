@@ -11,6 +11,7 @@ let bezierSlots = [];
 let activeBezierIndex = 0;
 let selectedBezierIndices = [0];
 let mergedControlPointsCount = 0;
+let linkedHandleState = null;
 let currentBezier = null, originalBezier = null, currentScale = 1;
 let dragState = { active: false, handle: null, startX: 0, startY: 0 };
 
@@ -24,6 +25,7 @@ function ensureBezierSlots() {
     activeBezierIndex = 0;
     selectedBezierIndices = [0];
     mergedControlPointsCount = 0;
+    linkedHandleState = null;
   }
   return bezierSlots;
 }
@@ -52,6 +54,15 @@ function normalizeSelectedBezierIndices() {
 
 function setMergedControlPointsState(value) {
   mergedControlPointsCount = Math.max(0, Number(value) || 0);
+}
+
+function setLinkedHandleState(slotIndex, handleName, otherSlotIndex, otherHandleName) {
+  linkedHandleState = {
+    slotIndex,
+    handleName,
+    otherSlotIndex,
+    otherHandleName
+  };
 }
 
 function selectBezierSlot(index, additive = false) {
@@ -193,6 +204,7 @@ function syncMatchingEndpoints(handleName, activeSlot, nextBezier) {
       const otherSlotIndex = bezierSlots.findIndex(slot => slot === otherSlot);
       selectedBezierIndices = [...new Set([activeBezierIndex, otherSlotIndex])].slice(-2);
       normalizeSelectedBezierIndices();
+      setLinkedHandleState(activeBezierIndex, handleName, otherSlotIndex, otherHandleName);
       refreshBezierButtons();
       render();
     }
@@ -209,6 +221,34 @@ function refreshBezierButtons() {
   btn1.classList.toggle('selected', selectedBezierIndices.includes(0));
   btn2.classList.toggle('selected', selectedBezierIndices.includes(1));
   btn2.style.display = bezierSlots.length > 1 ? 'inline-block' : 'none';
+}
+
+function releaseMergedControlPoints() {
+  if (mergedControlPointsCount <= 0) return false;
+
+  const activeSlot = getActiveSlot();
+  if (activeSlot && activeSlot.bezier && linkedHandleState) {
+    const handleName = linkedHandleState.slotIndex === activeBezierIndex ? linkedHandleState.handleName : linkedHandleState.otherHandleName;
+    const nextBezier = { ...activeSlot.bezier };
+    nextBezier[handleName] = {
+      x: activeSlot.bezier[handleName].x - 20,
+      y: activeSlot.bezier[handleName].y
+    };
+    activeSlot.bezier = nextBezier;
+    activeSlot.originalBezier = cloneBezier(nextBezier);
+    activeSlot.scale = 1;
+  }
+
+  setMergedControlPointsState(0);
+  linkedHandleState = null;
+  refreshBezierButtons();
+  render();
+  if (currentBezier) {
+    drawFittedBezier(currentBezier, true);
+    updateControlPointInfo(currentBezier);
+  }
+  saveBezierToStorage();
+  return true;
 }
 
 function syncSize() {
@@ -340,6 +380,12 @@ canvas.addEventListener('touchend', () => {
 window.addEventListener('keydown', e => {
   if (e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
   const key = e.key.toLowerCase();
+
+  if (key === 'tab' && mergedControlPointsCount > 0) {
+    if (releaseMergedControlPoints()) e.preventDefault();
+    return;
+  }
+
   if (!['i', 'j', 'k', 'l'].includes(key)) return;
   const delta = e.shiftKey ? 10 : 5;
   let dx = 0, dy = 0;
