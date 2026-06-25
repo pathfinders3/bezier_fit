@@ -163,9 +163,15 @@ function updateDraggedHandle(slot, handleName, dx, dy) {
   nextBezier[handleName] = movedPoint;
 
   if (mergedControlPointsCount > 0 && ['P0', 'P3'].includes(handleName)) {
-    const otherSlot = bezierSlots.find(candidate => candidate !== slot);
+    const slotIndex = bezierSlots.findIndex(candidate => candidate === slot);
+    const otherSlotIndex = linkedHandleState && linkedHandleState.slotIndex === slotIndex && linkedHandleState.handleName === handleName
+      ? linkedHandleState.otherSlotIndex
+      : -1;
+    const otherSlot = otherSlotIndex >= 0 ? bezierSlots[otherSlotIndex] : bezierSlots.find(candidate => candidate !== slot);
     if (otherSlot && otherSlot.bezier) {
-      const otherHandleName = handleName === 'P0' ? 'P0' : 'P3';
+      const otherHandleName = linkedHandleState && linkedHandleState.slotIndex === slotIndex && linkedHandleState.handleName === handleName
+        ? linkedHandleState.otherHandleName
+        : (handleName === 'P0' ? 'P0' : 'P3');
       const otherNextBezier = { ...otherSlot.bezier };
       otherNextBezier[otherHandleName] = {
         x: otherSlot.bezier[otherHandleName].x + dx,
@@ -193,12 +199,19 @@ function syncMatchingEndpoints(handleName, activeSlot, nextBezier) {
   const isStartPoint = handleName === 'P0';
   const isEndPoint = handleName === 'P3';
   if (!isStartPoint && !isEndPoint) return;
-  const otherHandleName = isStartPoint ? 'P0' : 'P3';
+
   const activeHandle = activeSlot.bezier[handleName];
-  const otherHandle = otherSlot.bezier[otherHandleName];
-  const dist = Math.hypot(activeHandle.x - otherHandle.x, activeHandle.y - otherHandle.y);
-  if (dist <= 8) {
-    nextBezier[handleName] = { x: otherHandle.x, y: otherHandle.y };
+  const candidateHandles = ['P0', 'P3'];
+  const matchedHandle = candidateHandles
+    .map(candidateName => ({
+      name: candidateName,
+      dist: Math.hypot(activeHandle.x - otherSlot.bezier[candidateName].x, activeHandle.y - otherSlot.bezier[candidateName].y)
+    }))
+    .sort((a, b) => a.dist - b.dist)[0];
+
+  if (matchedHandle && matchedHandle.dist <= 8) {
+    const otherHandleName = matchedHandle.name;
+    nextBezier[handleName] = { x: otherSlot.bezier[otherHandleName].x, y: otherSlot.bezier[otherHandleName].y };
     setMergedControlPointsState(mergedControlPointsCount + 1);
     if (bezierSlots.length > 1) {
       const otherSlotIndex = bezierSlots.findIndex(slot => slot === otherSlot);
