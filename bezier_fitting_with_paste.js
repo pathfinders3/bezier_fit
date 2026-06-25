@@ -14,31 +14,6 @@ let mergedControlPointsCount = 0;
 let linkedHandleState = null;
 let currentBezier = null, originalBezier = null, currentScale = 1;
 let dragState = { active: false, handle: null, startX: 0, startY: 0 };
-let interactionMode = 'draw';
-
-function applyInteractionModeUI() {
-  const drawChk = document.getElementById('chk-mode-draw');
-  const bezierChk = document.getElementById('chk-mode-bezier');
-  if (drawChk) drawChk.checked = interactionMode === 'draw';
-  if (bezierChk) bezierChk.checked = interactionMode === 'bezier';
-  canvas.style.cursor = interactionMode === 'draw' ? 'crosshair' : 'default';
-}
-
-function setInteractionMode(mode, checked = true) {
-  if (!['draw', 'bezier'].includes(mode)) return;
-  if (!checked) {
-    interactionMode = mode === 'draw' ? 'bezier' : 'draw';
-  } else {
-    interactionMode = mode;
-  }
-
-  dragState.active = false;
-  dragState.handle = null;
-  bezierSlots.forEach(slot => {
-    slot.drawing = false;
-  });
-  applyInteractionModeUI();
-}
 
 function createBezierSlot() {
   return { pts: [], drawing: false, bezier: null, originalBezier: null, scale: 1, errText: '' };
@@ -308,20 +283,13 @@ function getPos(e) {
 
 canvas.addEventListener('mousedown', e => {
   const pos = getPos(e);
-  const slot = getActiveSlot();
-
-  if (interactionMode === 'draw') {
-    slot.drawing = true;
-    slot.pts = [pos];
-    render();
-    return;
-  }
 
   // Shift+click is reserved for multi-selecting up to two curves.
   if (e.shiftKey && selectBezierAtPoint(pos.x, pos.y, true)) {
     return;
   }
 
+  const slot = getActiveSlot();
   const handle = getControlHandleAtPoint(slot, pos.x, pos.y);
   if (handle) {
     dragState.active = true;
@@ -340,13 +308,6 @@ canvas.addEventListener('mousedown', e => {
 canvas.addEventListener('mousemove', e => {
   const slot = getActiveSlot();
   const pos = getPos(e);
-  if (interactionMode === 'draw') {
-    if (!slot.drawing) return;
-    slot.pts.push(pos);
-    render();
-    return;
-  }
-
   if (dragState.active && slot.bezier) {
     const dx = pos.x - dragState.startX;
     const dy = pos.y - dragState.startY;
@@ -368,10 +329,8 @@ canvas.addEventListener('mouseup', () => {
   const slot = getActiveSlot();
   dragState.active = false;
   dragState.handle = null;
-  if (interactionMode === 'draw' && slot.drawing) {
-    slot.drawing = false;
-    refit();
-  }
+  slot.drawing = false;
+  refit();
 });
 canvas.addEventListener('mouseleave', () => {
   const slot = getActiveSlot();
@@ -379,7 +338,7 @@ canvas.addEventListener('mouseleave', () => {
     dragState.active = false;
     dragState.handle = null;
   }
-  if (interactionMode === 'draw' && slot.drawing) {
+  if (slot.drawing) {
     slot.drawing = false;
     refit();
   }
@@ -388,13 +347,6 @@ canvas.addEventListener('touchstart', e => {
   e.preventDefault();
   const pos = getPos(e);
   const slot = getActiveSlot();
-  if (interactionMode === 'draw') {
-    slot.drawing = true;
-    slot.pts = [pos];
-    render();
-    return;
-  }
-
   const handle = getControlHandleAtPoint(slot, pos.x, pos.y);
   if (handle) {
     dragState.active = true;
@@ -414,13 +366,6 @@ canvas.addEventListener('touchmove', e => {
   e.preventDefault();
   const slot = getActiveSlot();
   const pos = getPos(e);
-  if (interactionMode === 'draw') {
-    if (!slot.drawing) return;
-    slot.pts.push(pos);
-    render();
-    return;
-  }
-
   if (dragState.active && slot.bezier) {
     const dx = pos.x - dragState.startX;
     const dy = pos.y - dragState.startY;
@@ -442,17 +387,13 @@ canvas.addEventListener('touchend', () => {
   const slot = getActiveSlot();
   dragState.active = false;
   dragState.handle = null;
-  if (interactionMode === 'draw' && slot.drawing) {
-    slot.drawing = false;
-    refit();
-  }
+  slot.drawing = false;
+  refit();
 });
 
 window.addEventListener('keydown', e => {
   if (e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
   const key = e.key.toLowerCase();
-
-  if (interactionMode !== 'bezier') return;
 
   if (key === 'tab' && mergedControlPointsCount > 0) {
     if (releaseMergedControlPoints()) e.preventDefault();
@@ -1053,7 +994,6 @@ function clearStoredBackground() {
 }
 
 ensureBezierSlots();
-applyInteractionModeUI();
 refreshBezierButtons();
 render();
 const savedCp = loadBezierFromStorage();
