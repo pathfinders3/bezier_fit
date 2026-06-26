@@ -101,6 +101,44 @@ function selectBezierSlot(index, additive = false) {
   updateControlPointInfo(currentBezier);
 }
 
+function deleteSelectedBezierSlots() {
+  if (isDrawMode) {
+    showToast('베지어 편집 모드에서만 사용할 수 있습니다');
+    return false;
+  }
+
+  const targets = [...new Set(
+    selectedBezierIndices
+      .filter(index => Number.isInteger(index) && index >= 0 && index < bezierSlots.length)
+  )];
+
+  if (targets.length === 0) return false;
+
+  bezierSlots = bezierSlots.filter((_, index) => !targets.includes(index));
+  if (bezierSlots.length === 0) {
+    bezierSlots = [createBezierSlot()];
+  }
+
+  const nextActiveIndex = Math.max(0, Math.min(activeBezierIndex, bezierSlots.length - 1));
+  activeBezierIndex = nextActiveIndex;
+  selectedBezierIndices = [activeBezierIndex];
+  linkedHandleState = null;
+  setMergedControlPointsState(0);
+  syncActiveBezierState();
+  refreshBezierButtons();
+  render();
+  if (currentBezier) {
+    drawFittedBezier(currentBezier, true);
+    updateControlPointInfo(currentBezier);
+  } else {
+    ['p0-val', 'p1-val', 'p2-val', 'p3-val'].forEach(id => document.getElementById(id).textContent = '—');
+  }
+  document.getElementById('err-box').textContent = '';
+  saveBezierToStorage();
+  showToast('선택한 곡선을 삭제했습니다');
+  return true;
+}
+
 function getCurveHitSlot(x, y) {
   const threshold = 10;
   for (let i = 0; i < bezierSlots.length; i++) {
@@ -435,6 +473,11 @@ window.addEventListener('keydown', e => {
 
   if (key === 'tab' && mergedControlPointsCount > 0) {
     if (releaseMergedControlPoints()) e.preventDefault();
+    return;
+  }
+
+  if (key === 'delete' || key === 'backspace') {
+    if (deleteSelectedBezierSlots()) e.preventDefault();
     return;
   }
 
