@@ -1036,6 +1036,14 @@ function refit() {
   }
   slot.errText = `평균 피팅 오차: ${(err/sampled.length).toFixed(1)}px`;
   document.getElementById('err-box').textContent = slot.errText;
+
+  // 직접 그리기 모드에서 새로운 곡선 슬롯 자동 추가
+  if (isDrawMode) {
+    bezierSlots.push(createBezierSlot());
+    activeBezierIndex = bezierSlots.length - 1;
+    selectedBezierIndices = [activeBezierIndex];
+    refreshBezierButtons();
+  }
 }
 
 function clearDrawing() {
