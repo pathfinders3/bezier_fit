@@ -864,50 +864,67 @@ async function exportBezierJsonToClipboard() {
     showToast('베지어 편집 모드에서만 사용할 수 있습니다');
     return;
   }
-  if (!currentBezier) {
+
+  const activeSlots = bezierSlots.filter(slot => slot.bezier);
+  if (activeSlots.length === 0) {
     showToast('먼저 곡선을 피팅해 주세요');
     return;
   }
 
-  const sampled = sampleBezierByDistance(currentBezier, 4);
-  const rects = sampled.map((p, i) => {
-    let role = 'middle';
-    if (i === 0) role = 'start';
-    else if (i === sampled.length - 1) role = 'end';
-
-    let angle = null;
-    if (i > 0) angle = angleFromPoints(sampled[i - 1], p);
-
-    return {
-      x: Math.round(p.x),
-      y: Math.round(p.y),
-      size: 4,
-      angle,
-      sharpTurn: false,
-      mergeState: false,
-      role,
-      polylineId: 'PL1',
-      pointOrder: i + 1
-    };
-  });
-
-  const pointIndices = Array.from({ length: rects.length }, (_, i) => i);
-  const sourcePoints = sampleBezierByDistance(originalBezier || currentBezier, 4);
-  const sourceBounds = boundsOfPoints(sourcePoints);
-  const appliedBounds = boundsOfPoints(sampled);
+  const allRects = [];
+  const polylines = [];
   const scaleValue = Number.isFinite(currentScale) ? currentScale : 1;
 
+  for (let si = 0; si < activeSlots.length; si++) {
+    const slot = activeSlots[si];
+    const polylineId = `PL${si + 1}`;
+    const sampled = sampleBezierByDistance(slot.bezier, 4);
+    const startIndex = allRects.length;
+
+    for (let i = 0; i < sampled.length; i++) {
+      const p = sampled[i];
+      let role = 'middle';
+      if (i === 0) role = 'start';
+      else if (i === sampled.length - 1) role = 'end';
+
+      let angle = null;
+      if (i > 0) angle = angleFromPoints(sampled[i - 1], p);
+
+      allRects.push({
+        x: Math.round(p.x),
+        y: Math.round(p.y),
+        size: 4,
+        angle,
+        sharpTurn: false,
+        mergeState: false,
+        role,
+        polylineId,
+        pointOrder: i + 1
+      });
+    }
+
+    const endIndex = allRects.length - 1;
+    const pointIndices = Array.from({ length: sampled.length }, (_, i) => startIndex + i);
+    polylines.push({
+      polylineId,
+      startIndex,
+      endIndex,
+      pointCount: sampled.length,
+      pointIndices
+    });
+  }
+
+  const activeSlot = getActiveSlot();
+  const sourcePoints = sampleBezierByDistance(
+    (activeSlot.originalBezier || activeSlot.bezier) ?? activeSlots[0].bezier, 4
+  );
+  const appliedPoints = sampleBezierByDistance(activeSlot.bezier ?? activeSlots[0].bezier, 4);
+  const sourceBounds = boundsOfPoints(sourcePoints);
+  const appliedBounds = boundsOfPoints(appliedPoints);
+
   const payload = {
-    rects,
-    polylines: [
-      {
-        polylineId: 'PL1',
-        startIndex: 0,
-        endIndex: Math.max(0, rects.length - 1),
-        pointCount: rects.length,
-        pointIndices
-      }
-    ],
+    rects: allRects,
+    polylines,
     canvas1ClipboardScale: {
       scalePercent: Math.round(scaleValue * 100),
       scale: Number(scaleValue.toFixed(4)),
@@ -922,7 +939,7 @@ async function exportBezierJsonToClipboard() {
   const text = JSON.stringify(payload, null, 2);
   try {
     await navigator.clipboard.writeText(text);
-    showToast('베지어 JSON을 클립보드로 복사했습니다');
+    showToast(`베지어 JSON을 클립보드로 복사했습니다 (${activeSlots.length}개 곡선)`);
   } catch (err) {
     showToast('클립보드 복사에 실패했습니다');
   }
