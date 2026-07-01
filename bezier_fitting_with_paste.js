@@ -261,33 +261,40 @@ function updateDraggedHandle(slot, handleName, dx, dy) {
 
 function syncMatchingEndpoints(handleName, activeSlot, nextBezier) {
   if (bezierSlots.length < 2 || !activeSlot || !activeSlot.bezier) return;
-  const otherSlot = bezierSlots.find(slot => slot !== activeSlot);
-  if (!otherSlot || !otherSlot.bezier) return;
   const isStartPoint = handleName === 'P0';
   const isEndPoint = handleName === 'P3';
   if (!isStartPoint && !isEndPoint) return;
 
   const activeHandle = activeSlot.bezier[handleName];
-  const candidateHandles = ['P0', 'P3'];
-  const matchedHandle = candidateHandles
-    .map(candidateName => ({
-      name: candidateName,
-      dist: Math.hypot(activeHandle.x - otherSlot.bezier[candidateName].x, activeHandle.y - otherSlot.bezier[candidateName].y)
-    }))
-    .sort((a, b) => a.dist - b.dist)[0];
+  let bestMatch = null;
 
-  if (matchedHandle && matchedHandle.dist <= 8) {
-    const otherHandleName = matchedHandle.name;
-    nextBezier[handleName] = { x: otherSlot.bezier[otherHandleName].x, y: otherSlot.bezier[otherHandleName].y };
+  bezierSlots.forEach((slot, slotIndex) => {
+    if (slot === activeSlot || !slot.bezier) return;
+    ['P0', 'P3'].forEach(candidateName => {
+      const candidate = slot.bezier[candidateName];
+      const dist = Math.hypot(activeHandle.x - candidate.x, activeHandle.y - candidate.y);
+      if (!bestMatch || dist < bestMatch.dist) {
+        bestMatch = { slot, slotIndex, candidateName, dist };
+      }
+    });
+  });
+
+  if (bestMatch && bestMatch.dist <= 8) {
+    const otherSlot = bestMatch.slot;
+    const otherSlotIndex = bestMatch.slotIndex;
+    const otherHandleName = bestMatch.candidateName;
+
+    nextBezier[handleName] = {
+      x: otherSlot.bezier[otherHandleName].x,
+      y: otherSlot.bezier[otherHandleName].y
+    };
     setMergedControlPointsState(mergedControlPointsCount + 1);
-    if (bezierSlots.length > 1) {
-      const otherSlotIndex = bezierSlots.findIndex(slot => slot === otherSlot);
-      selectedBezierIndices = [...new Set([activeBezierIndex, otherSlotIndex])].slice(-2);
-      normalizeSelectedBezierIndices();
-      setLinkedHandleState(activeBezierIndex, handleName, otherSlotIndex, otherHandleName);
-      refreshBezierButtons();
-      render();
-    }
+
+    selectedBezierIndices = [...new Set([activeBezierIndex, otherSlotIndex])].slice(-2);
+    normalizeSelectedBezierIndices();
+    setLinkedHandleState(activeBezierIndex, handleName, otherSlotIndex, otherHandleName);
+    refreshBezierButtons();
+    render();
   }
 }
 
