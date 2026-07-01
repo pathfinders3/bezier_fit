@@ -900,8 +900,8 @@ function findConnectedCurveGroups(slots) {
 
 async function exportBezierJsonToClipboard() {
   if (isDrawMode) {
-    showToast('베지어 편집 모드에서만 사용할 수 있습니다');
-    return;
+    toggleDrawMode(false);
+    showToast('직접 그리기 모드를 OFF 했습니다');
   }
 
   const activeSlots = bezierSlots.filter(slot => slot.bezier);
