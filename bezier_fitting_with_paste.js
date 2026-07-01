@@ -859,6 +859,45 @@ function angleFromPoints(a, b) {
   return Math.round((rad * 180 / Math.PI + 360) % 360);
 }
 
+function findConnectedCurveGroups(slots) {
+  const groups = [];
+  const visited = new Set();
+  const threshold = 5;
+
+  for (let i = 0; i < slots.length; i++) {
+    if (visited.has(i) || !slots[i].bezier) continue;
+
+    const group = [i];
+    visited.add(i);
+    let current = i;
+
+    // 이 곡선의 P3과 연결된 곡선 찾기
+    while (true) {
+      let connected = false;
+      const P3 = slots[current].bezier.P3;
+
+      for (let j = 0; j < slots.length; j++) {
+        if (visited.has(j) || !slots[j].bezier) continue;
+        const P0 = slots[j].bezier.P0;
+        const dist = Math.hypot(P3.x - P0.x, P3.y - P0.y);
+
+        if (dist <= threshold) {
+          group.push(j);
+          visited.add(j);
+          current = j;
+          connected = true;
+          break;
+        }
+      }
+      if (!connected) break;
+    }
+
+    groups.push(group);
+  }
+
+  return groups;
+}
+
 async function exportBezierJsonToClipboard() {
   if (isDrawMode) {
     showToast('베지어 편집 모드에서만 사용할 수 있습니다');
@@ -871,45 +910,75 @@ async function exportBezierJsonToClipboard() {
     return;
   }
 
+  // 슬롯 인덱스 맵핑 (activeSlots → bezierSlots)
+  const slotIndexMap = new Map();
+  for (let i = 0; i < activeSlots.length; i++) {
+    const idx = bezierSlots.indexOf(activeSlots[i]);
+    slotIndexMap.set(i, idx);
+  }
+
   const allRects = [];
   const polylines = [];
   const scaleValue = Number.isFinite(currentScale) ? currentScale : 1;
 
-  for (let si = 0; si < activeSlots.length; si++) {
-    const slot = activeSlots[si];
-    const polylineId = `PL${si + 1}`;
-    const sampled = sampleBezierByDistance(slot.bezier, 4);
+  // 연결된 곡선 그룹 찾기
+  const groups = findConnectedCurveGroups(bezierSlots);
+  const groupsToExport = groups.map(group => 
+    group.filter(idx => activeSlots.includes(bezierSlots[idx]))
+  ).filter(group => group.length > 0);
+
+  let polylineCount = 0;
+  for (const group of groupsToExport) {
+    polylineCount++;
+    const polylineId = `PL${polylineCount}`;
     const startIndex = allRects.length;
 
-    for (let i = 0; i < sampled.length; i++) {
-      const p = sampled[i];
-      let role = 'middle';
-      if (i === 0) role = 'start';
-      else if (i === sampled.length - 1) role = 'end';
+    for (let gi = 0; gi < group.length; gi++) {
+      const slotIdx = group[gi];
+      const slot = bezierSlots[slotIdx];
+      const sampled = sampleBezierByDistance(slot.bezier, 4);
 
-      let angle = null;
-      if (i > 0) angle = angleFromPoints(sampled[i - 1], p);
+      for (let i = 0; i < sampled.length; i++) {
+        // 연결된 곡선 다음부터는 시작점 스킵 (중복 제거)
+        if (gi > 0 && i === 0) continue;
 
-      allRects.push({
-        x: Math.round(p.x),
-        y: Math.round(p.y),
-        size: 4,
-        angle,
-        sharpTurn: false,
-        mergeState: false,
-        role,
-        polylineId,
-        pointOrder: i + 1
-      });
+        const p = sampled[i];
+        let role = 'middle';
+
+        // 전체 그룹 기준 시작/끝점 판정
+        if (gi === 0 && i === 0) role = 'start';
+        else if (gi === group.length - 1 && i === sampled.length - 1) role = 'end';
+
+        let angle = null;
+        if (allRects.length > 0) {
+          const prevRect = allRects[allRects.length - 1];
+          angle = angleFromPoints(
+            { x: prevRect.x, y: prevRect.y },
+            p
+          );
+        }
+
+        allRects.push({
+          x: Math.round(p.x),
+          y: Math.round(p.y),
+          size: 4,
+          angle,
+          sharpTurn: false,
+          mergeState: false,
+          role,
+          polylineId,
+          pointOrder: allRects.length - startIndex + 1
+        });
+      }
     }
 
     const endIndex = allRects.length - 1;
-    const pointIndices = Array.from({ length: sampled.length }, (_, i) => startIndex + i);
+    const pointIndices = Array.from({ length: endIndex - startIndex + 1 }, (_, i) => startIndex + i);
     polylines.push({
       polylineId,
       startIndex,
       endIndex,
-      pointCount: sampled.length,
+      pointCount: pointIndices.length,
       pointIndices
     });
   }
@@ -939,7 +1008,7 @@ async function exportBezierJsonToClipboard() {
   const text = JSON.stringify(payload, null, 2);
   try {
     await navigator.clipboard.writeText(text);
-    showToast(`베지어 JSON을 클립보드로 복사했습니다 (${activeSlots.length}개 곡선)`);
+    showToast(`베지어 JSON을 클립보드로 복사했습니다 (${activeSlots.length}개 곡선, ${polylineCount}개 라인)`);
   } catch (err) {
     showToast('클립보드 복사에 실패했습니다');
   }
