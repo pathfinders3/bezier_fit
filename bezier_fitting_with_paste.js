@@ -27,6 +27,9 @@ function toggleDrawMode(checked) {
   dragState.active = false;
   dragState.handle = null;
   updateCanvasCursor();
+  // 체크박스 상태 동기화
+  const checkbox = document.getElementById('chk-draw-mode');
+  if (checkbox) checkbox.checked = isDrawMode;
   showToast(isDrawMode ? '직접 그리기 모드' : '베지어 편집 모드');
 }
 
