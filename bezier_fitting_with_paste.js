@@ -152,6 +152,12 @@ function getCurveHitSlot(x, y) {
       const dist = Math.hypot(dx, dy);
       if (dist < minDist) minDist = dist;
     }
+    // P1, P2는 곡선 경로 밖에 있을 수 있으므로 제어점도 hit 판정에 포함
+    for (const key of ['P1', 'P2']) {
+      const p = slot.bezier[key];
+      const dist = Math.hypot(p.x - x, p.y - y);
+      if (dist < minDist) minDist = dist;
+    }
     if (minDist <= threshold) return i;
   }
   return -1;
