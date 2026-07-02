@@ -3,6 +3,7 @@ const bgCanvas = document.getElementById('bg-canvas');
 const ctx = canvas.getContext('2d');
 const bgCtx = bgCanvas.getContext('2d');
 const W = 660, H = 360;
+const MAX_BEZIER_SLOTS = 4;
 const BEZIER_STORAGE_KEY = 'bezier_fit:last_control_points';
 const BG_IMAGE_STORAGE_KEY = 'bezier_fit:last_background_image';
 let bgImage = null, bgOpacity = 0.35;
@@ -311,15 +312,20 @@ function syncMatchingEndpoints(handleName, activeSlot, nextBezier) {
 }
 
 function refreshBezierButtons() {
-  const btn1 = document.getElementById('btn-bezier-1');
-  const btn2 = document.getElementById('btn-bezier-2');
-  if (!btn1 || !btn2) return;
+  const buttons = [];
+  for (let i = 1; i <= MAX_BEZIER_SLOTS; i++) {
+    const btn = document.getElementById(`btn-bezier-${i}`);
+    if (btn) buttons.push(btn);
+  }
+  if (buttons.length === 0) return;
+
   normalizeSelectedBezierIndices();
-  btn1.classList.toggle('active', activeBezierIndex === 0);
-  btn2.classList.toggle('active', activeBezierIndex === 1);
-  btn1.classList.toggle('selected', selectedBezierIndices.includes(0));
-  btn2.classList.toggle('selected', selectedBezierIndices.includes(1));
-  btn2.style.display = bezierSlots.length > 1 ? 'inline-block' : 'none';
+
+  buttons.forEach((btn, idx) => {
+    btn.classList.toggle('active', activeBezierIndex === idx);
+    btn.classList.toggle('selected', selectedBezierIndices.includes(idx));
+    btn.style.display = idx < bezierSlots.length ? 'inline-block' : 'none';
+  });
 }
 
 function releaseMergedControlPoints() {
@@ -387,8 +393,8 @@ function ensureSlotForDrawing() {
     return getActiveSlot();
   }
 
-  if (bezierSlots.length >= 2) {
-    showToast('베지어 곡선은 최대 2개까지 추가할 수 있습니다');
+  if (bezierSlots.length >= MAX_BEZIER_SLOTS) {
+    showToast(`베지어 곡선은 최대 ${MAX_BEZIER_SLOTS}개까지 추가할 수 있습니다`);
     return null;
   }
 
@@ -1142,8 +1148,8 @@ function addBezierSlot() {
     showToast('베지어 편집 모드에서만 사용할 수 있습니다');
     return;
   }
-  if (bezierSlots.length >= 2) {
-    showToast('베지어 곡선은 최대 2개까지 추가할 수 있습니다');
+  if (bezierSlots.length >= MAX_BEZIER_SLOTS) {
+    showToast(`베지어 곡선은 최대 ${MAX_BEZIER_SLOTS}개까지 추가할 수 있습니다`);
     return;
   }
   bezierSlots.push(createBezierSlot());
