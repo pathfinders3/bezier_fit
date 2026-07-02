@@ -374,6 +374,32 @@ function finishDrawStroke() {
   return true;
 }
 
+function ensureSlotForDrawing() {
+  const slot = getActiveSlot();
+  if (!slot.bezier) return slot;
+
+  const reusableIndex = bezierSlots.findIndex(candidate => !candidate.bezier);
+  if (reusableIndex >= 0) {
+    activeBezierIndex = reusableIndex;
+    selectedBezierIndices = [activeBezierIndex];
+    syncActiveBezierState();
+    refreshBezierButtons();
+    return getActiveSlot();
+  }
+
+  if (bezierSlots.length >= 2) {
+    showToast('베지어 곡선은 최대 2개까지 추가할 수 있습니다');
+    return null;
+  }
+
+  bezierSlots.push(createBezierSlot());
+  activeBezierIndex = bezierSlots.length - 1;
+  selectedBezierIndices = [activeBezierIndex];
+  syncActiveBezierState();
+  refreshBezierButtons();
+  return getActiveSlot();
+}
+
 function startCurveDrag(pos) {
   dragState.active = true;
   dragState.mode = 'curve';
@@ -384,9 +410,11 @@ function startCurveDrag(pos) {
 
 canvas.addEventListener('mousedown', e => {
   const pos = getPos(e);
-  const slot = getActiveSlot();
+  let slot = getActiveSlot();
 
   if (isDrawMode) {
+    slot = ensureSlotForDrawing();
+    if (!slot) return;
     slot.drawing = true;
     slot.pts = [pos];
     render();
@@ -464,8 +492,10 @@ canvas.addEventListener('mouseleave', () => {
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
   const pos = getPos(e);
-  const slot = getActiveSlot();
+  let slot = getActiveSlot();
   if (isDrawMode) {
+    slot = ensureSlotForDrawing();
+    if (!slot) return;
     slot.drawing = true;
     slot.pts = [pos];
     render();
@@ -1185,13 +1215,6 @@ function refit() {
   slot.errText = `평균 피팅 오차: ${(err/sampled.length).toFixed(1)}px`;
   document.getElementById('err-box').textContent = slot.errText;
 
-  // 직접 그리기 모드에서 새로운 곡선 슬롯 자동 추가
-  if (isDrawMode) {
-    bezierSlots.push(createBezierSlot());
-    activeBezierIndex = bezierSlots.length - 1;
-    selectedBezierIndices = [activeBezierIndex];
-    refreshBezierButtons();
-  }
 }
 
 function clearDrawing() {
