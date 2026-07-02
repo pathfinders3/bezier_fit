@@ -14,7 +14,7 @@ let selectedBezierIndices = [0];
 let mergedControlPointsCount = 0;
 let linkedHandleState = null;
 let currentBezier = null, originalBezier = null, currentScale = 1;
-let dragState = { active: false, handle: null, startX: 0, startY: 0 };
+let dragState = { active: false, handle: null, mode: null, startX: 0, startY: 0 };
 
 function updateCanvasCursor() {
   canvas.style.cursor = isDrawMode ? 'crosshair' : 'default';
@@ -26,6 +26,7 @@ function toggleDrawMode(checked) {
   slot.drawing = false;
   dragState.active = false;
   dragState.handle = null;
+  dragState.mode = null;
   updateCanvasCursor();
   // 체크박스 상태 동기화
   const checkbox = document.getElementById('chk-draw-mode');
@@ -179,6 +180,17 @@ function getControlHandleAtPoint(slot, x, y) {
     const dx = pt.x - x;
     const dy = pt.y - y;
     if (Math.hypot(dx, dy) <= threshold) return name;
+  }
+  return null;
+}
+
+function getControlHandleHit(x, y) {
+  for (let i = 0; i < bezierSlots.length; i++) {
+    const slot = bezierSlots[i];
+    const handle = getControlHandleAtPoint(slot, x, y);
+    if (handle) {
+      return { slotIndex: i, handle };
+    }
   }
   return null;
 }
@@ -362,6 +374,14 @@ function finishDrawStroke() {
   return true;
 }
 
+function startCurveDrag(pos) {
+  dragState.active = true;
+  dragState.mode = 'curve';
+  dragState.handle = null;
+  dragState.startX = pos.x;
+  dragState.startY = pos.y;
+}
+
 canvas.addEventListener('mousedown', e => {
   const pos = getPos(e);
   const slot = getActiveSlot();
@@ -378,15 +398,20 @@ canvas.addEventListener('mousedown', e => {
     return;
   }
 
-  const handle = getControlHandleAtPoint(slot, pos.x, pos.y);
-  if (handle) {
+  const handleHit = getControlHandleHit(pos.x, pos.y);
+  if (handleHit) {
+    if (handleHit.slotIndex !== activeBezierIndex) {
+      selectBezierSlot(handleHit.slotIndex, false);
+    }
     dragState.active = true;
-    dragState.handle = handle;
+    dragState.mode = 'handle';
+    dragState.handle = handleHit.handle;
     dragState.startX = pos.x;
     dragState.startY = pos.y;
     return;
   }
   if (selectBezierAtPoint(pos.x, pos.y, e.shiftKey)) {
+    if (!e.shiftKey) startCurveDrag(pos);
     return;
   }
 });
@@ -402,14 +427,21 @@ canvas.addEventListener('mousemove', e => {
   if (dragState.active && slot.bezier) {
     const dx = pos.x - dragState.startX;
     const dy = pos.y - dragState.startY;
-    updateDraggedHandle(slot, dragState.handle, dx, dy);
-    syncActiveBezierState();
-    dragState.startX = pos.x;
-    dragState.startY = pos.y;
-    render();
-    drawFittedBezier(currentBezier, true);
-    updateControlPointInfo(currentBezier);
-    saveBezierToStorage();
+    if (dragState.mode === 'curve') {
+      if (moveSelectedBezier(dx, dy)) {
+        dragState.startX = pos.x;
+        dragState.startY = pos.y;
+      }
+    } else {
+      updateDraggedHandle(slot, dragState.handle, dx, dy);
+      syncActiveBezierState();
+      dragState.startX = pos.x;
+      dragState.startY = pos.y;
+      render();
+      drawFittedBezier(currentBezier, true);
+      updateControlPointInfo(currentBezier);
+      saveBezierToStorage();
+    }
     return;
   }
 });
@@ -417,6 +449,7 @@ canvas.addEventListener('mouseup', () => {
   const slot = getActiveSlot();
   dragState.active = false;
   dragState.handle = null;
+  dragState.mode = null;
   if (isDrawMode && slot.drawing) finishDrawStroke();
 });
 canvas.addEventListener('mouseleave', () => {
@@ -424,6 +457,7 @@ canvas.addEventListener('mouseleave', () => {
   if (dragState.active) {
     dragState.active = false;
     dragState.handle = null;
+    dragState.mode = null;
   }
   if (slot.drawing && isDrawMode) finishDrawStroke();
 });
@@ -437,15 +471,20 @@ canvas.addEventListener('touchstart', e => {
     render();
     return;
   }
-  const handle = getControlHandleAtPoint(slot, pos.x, pos.y);
-  if (handle) {
+  const handleHit = getControlHandleHit(pos.x, pos.y);
+  if (handleHit) {
+    if (handleHit.slotIndex !== activeBezierIndex) {
+      selectBezierSlot(handleHit.slotIndex, false);
+    }
     dragState.active = true;
-    dragState.handle = handle;
+    dragState.mode = 'handle';
+    dragState.handle = handleHit.handle;
     dragState.startX = pos.x;
     dragState.startY = pos.y;
     return;
   }
   if (selectBezierAtPoint(pos.x, pos.y)) {
+    startCurveDrag(pos);
     return;
   }
 }, { passive: false });
@@ -462,14 +501,21 @@ canvas.addEventListener('touchmove', e => {
   if (dragState.active && slot.bezier) {
     const dx = pos.x - dragState.startX;
     const dy = pos.y - dragState.startY;
-    updateDraggedHandle(slot, dragState.handle, dx, dy);
-    syncActiveBezierState();
-    dragState.startX = pos.x;
-    dragState.startY = pos.y;
-    render();
-    drawFittedBezier(currentBezier, true);
-    updateControlPointInfo(currentBezier);
-    saveBezierToStorage();
+    if (dragState.mode === 'curve') {
+      if (moveSelectedBezier(dx, dy)) {
+        dragState.startX = pos.x;
+        dragState.startY = pos.y;
+      }
+    } else {
+      updateDraggedHandle(slot, dragState.handle, dx, dy);
+      syncActiveBezierState();
+      dragState.startX = pos.x;
+      dragState.startY = pos.y;
+      render();
+      drawFittedBezier(currentBezier, true);
+      updateControlPointInfo(currentBezier);
+      saveBezierToStorage();
+    }
     return;
   }
 }, { passive: false });
@@ -477,6 +523,7 @@ canvas.addEventListener('touchend', () => {
   const slot = getActiveSlot();
   dragState.active = false;
   dragState.handle = null;
+  dragState.mode = null;
   if (isDrawMode && slot.drawing) finishDrawStroke();
 });
 
