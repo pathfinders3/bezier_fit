@@ -354,6 +354,14 @@ function getPos(e) {
   return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
 }
 
+function finishDrawStroke() {
+  const slot = getActiveSlot();
+  if (!slot.drawing) return false;
+  toggleDrawMode(false);
+  refit();
+  return true;
+}
+
 canvas.addEventListener('mousedown', e => {
   const pos = getPos(e);
   const slot = getActiveSlot();
@@ -409,10 +417,7 @@ canvas.addEventListener('mouseup', () => {
   const slot = getActiveSlot();
   dragState.active = false;
   dragState.handle = null;
-  if (isDrawMode && slot.drawing) {
-    slot.drawing = false;
-    refit();
-  }
+  if (isDrawMode && slot.drawing) finishDrawStroke();
 });
 canvas.addEventListener('mouseleave', () => {
   const slot = getActiveSlot();
@@ -420,10 +425,7 @@ canvas.addEventListener('mouseleave', () => {
     dragState.active = false;
     dragState.handle = null;
   }
-  if (slot.drawing) {
-    slot.drawing = false;
-    if (isDrawMode) refit();
-  }
+  if (slot.drawing && isDrawMode) finishDrawStroke();
 });
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
@@ -475,10 +477,7 @@ canvas.addEventListener('touchend', () => {
   const slot = getActiveSlot();
   dragState.active = false;
   dragState.handle = null;
-  if (isDrawMode && slot.drawing) {
-    slot.drawing = false;
-    refit();
-  }
+  if (isDrawMode && slot.drawing) finishDrawStroke();
 });
 
 window.addEventListener('keydown', e => {
